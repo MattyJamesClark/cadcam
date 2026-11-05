@@ -1,0 +1,74 @@
+# CADCAM Studio
+
+A modular CAD/CAM desktop app for Windows. Built with Electron, Three.js and TypeScript.
+
+## Install and updates
+
+Download `CADCAM-Studio-Setup-x.y.z.exe` from the [latest release](https://github.com/MattyJamesClark/cadcam/releases/latest) and run it **once**.
+
+After that the app keeps itself up to date. Every push to `main` builds a new installer
+and publishes it as a GitHub Release. The installed app checks for a new version when it starts
+and every 30 minutes, downloads it in the background, and shows an orange
+**"Update ready. Restart to apply"** button in the title bar. If you ignore it, the update is
+installed the next time you close the app.
+
+The installer isn't code-signed yet, so Windows SmartScreen may warn on the very first install
+("More info" → "Run anyway"). Updates after that install silently.
+
+## Using the viewport
+
+| Action | Mouse / key |
+| --- | --- |
+| Rotate | Right-drag |
+| Pan | Middle-drag, or Shift + right-drag |
+| Zoom (to cursor) | Wheel |
+| Select / multi-select | Left-click / Ctrl+click |
+| Snap to a view | Click a face of the view cube |
+| Fit all / fit selected | F / Shift+F |
+| Iso, Top, Front, Right | 0, 7, 1, 3 (Ctrl for the opposite side) |
+| Perspective / orthographic | 5 / Shift+5 |
+| Grid on/off | G |
+| New / Open / Import-merge | Ctrl+N / Ctrl+O / Ctrl+I |
+
+Drag files onto the window to merge them into the current design.
+
+**Formats today:** import STL, OBJ, PLY, glTF/GLB, 3MF. Export STL, OBJ, PLY, GLB.
+STEP/IGES (true solids) arrive with the Part Design module.
+
+## Architecture
+
+```
+src/
+  main/        Electron main process: window, file dialogs, auto-updater
+  preload/     Safe bridge exposed to the UI as window.host
+  shared/      IPC types shared by main and UI
+  renderer/src/
+    core/      Shell (tabs, ribbon, model tree, status bar), Viewport, Document, file-format registry
+    modules/   One folder per top tab. Each exports a CadModule.
+```
+
+### Adding a module
+
+1. Create `src/renderer/src/modules/<name>/index.ts` exporting a `CadModule`
+   (`id`, `title`, `order`, and `groups` of `commands`). See `modules/view` for a compact example.
+2. Add it to the list in `src/renderer/src/modules/index.ts`.
+
+Each command gets the `ModuleContext` (document, viewport, status bar), can declare a keyboard
+shortcut, and can report `isEnabled` / `isActive` so the ribbon greys out or highlights it.
+
+### Adding a file format
+
+Call `registerImporter` / `registerExporter` from `core/io.ts` (see `core/formats.ts`). Import,
+merge, drag-and-drop and the file dialogs pick up new formats automatically.
+
+## Development
+
+```bash
+npm install
+npm run dev         # run with hot reload
+npm run typecheck
+npm run dist        # build a local Windows installer into dist/ (no publish)
+```
+
+Releases are produced by `.github/workflows/release.yml`; the version is `major.minor` from
+`package.json` plus the CI build number. Bump `major.minor` in `package.json` for milestone releases.

@@ -1,0 +1,111 @@
+:root {
+  --bg: #1b1e23;
+  --panel: #23272e;
+  --panel-2: #2a2f37;
+  --line: #353b44;
+  --text: #e3e7ec;
+  --muted: #9099a5;
+  --accent: #ff9f1c;
+  --accent-soft: rgba(255, 159, 28, 0.16);
+  --ok: #46a758;
+  --warn: #e5a50a;
+  --err: #e5484d;
+  --vp-top: #3b4350;
+  --vp-bottom: #1c2026;
+  color-scheme: dark;
+  font: 13px/1.4 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; user-select: none; }
+button { font: inherit; color: inherit; }
+
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 34px 32px auto 1fr 24px;
+}
+
+/* title bar */
+.titlebar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 12px; background: #15181c; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 600; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
+.brand-mark { width: 14px; height: 14px; border-radius: 3px; background: linear-gradient(135deg, var(--accent), #e85d04); }
+.doc-name { color: var(--muted); flex: 1; }
+.update-pill {
+  display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--muted); cursor: default;
+}
+.update-pill[hidden] { display: none; }
+.update-pill svg { width: 14px; height: 14px; }
+.update-pill.ready { background: var(--accent); border-color: var(--accent); color: #1b1e23; font-weight: 600; cursor: pointer; }
+.update-pill.ready:hover { filter: brightness(1.08); }
+
+/* module tabs */
+.tabs { display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; background: #15181c; border-bottom: 1px solid var(--line); }
+.tab {
+  height: 28px; padding: 0 16px; border: 1px solid transparent; border-bottom: none;
+  border-radius: 6px 6px 0 0; background: none; color: var(--muted); cursor: pointer;
+}
+.tab:hover { color: var(--text); background: var(--panel); }
+.tab.active { color: var(--text); background: var(--panel); border-color: var(--line); position: relative; top: 1px; box-shadow: inset 0 2px 0 var(--accent); }
+.tab.planned { font-style: italic; }
+
+/* ribbon */
+.ribbon {
+  display: flex; gap: 0; min-height: 86px; padding: 6px 8px 0; background: var(--panel);
+  border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden;
+}
+.ribbon-group { display: flex; flex-direction: column; padding: 0 8px; border-right: 1px solid var(--line); }
+.ribbon-group:last-child { border-right: none; }
+.ribbon-row { display: flex; gap: 2px; flex: 1; }
+.ribbon-label { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0 4px; white-space: nowrap; }
+.cmd {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  min-width: 54px; padding: 5px 6px; border: 1px solid transparent; border-radius: 5px;
+  background: none; cursor: pointer; font-size: 11.5px; white-space: nowrap;
+}
+.cmd svg { width: 24px; height: 24px; }
+.cmd:hover:not(:disabled) { background: var(--panel-2); border-color: var(--line); }
+.cmd:active:not(:disabled) { background: #323843; }
+.cmd.on { background: var(--accent-soft); border-color: rgba(255, 159, 28, .45); color: #ffd19a; }
+.cmd:disabled { opacity: .38; cursor: default; }
+.cmd:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ribbon-planned { align-self: center; color: var(--muted); padding: 0 8px; max-width: 900px; }
+.ribbon-planned strong { color: var(--text); }
+
+/* workspace */
+.workspace { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+.sidebar { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.panel-title { padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.tree { list-style: none; margin: 0; padding: 4px 0; overflow: auto; flex: 1; }
+.tree-empty { padding: 12px; color: var(--muted); line-height: 1.5; }
+.tree-item { display: flex; align-items: center; gap: 6px; padding: 3px 8px; cursor: pointer; }
+.tree-item:hover { background: var(--panel-2); }
+.tree-item.selected { background: var(--accent-soft); }
+.tree-item.hidden-item .tree-label { color: var(--muted); }
+.tree-eye { width: 22px; height: 22px; padding: 2px; border: none; background: none; color: var(--muted); cursor: pointer; flex: none; }
+.tree-eye:hover { color: var(--text); }
+.tree-eye svg { width: 16px; height: 16px; }
+.tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-kind { color: var(--muted); font-size: 11px; }
+.tree-rename { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 1px 4px; font: inherit; }
+
+.viewport { position: relative; min-width: 0; min-height: 0; background: linear-gradient(var(--vp-top), var(--vp-bottom)); }
+.viewport-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+.viewcube { position: absolute; top: 10px; right: 10px; width: 120px; height: 120px; }
+body.dropping .viewport::after {
+  content: 'Drop files to add them to the design'; position: absolute; inset: 12px;
+  display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 10px;
+  background: rgba(27, 30, 35, .6); color: var(--text); font-size: 16px; pointer-events: none;
+}
+
+/* status bar */
+.statusbar { display: flex; align-items: center; gap: 20px; padding: 0 12px; background: #15181c; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.status-msg { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-msg[data-kind='success'] { color: var(--ok); }
+.status-msg[data-kind='warn'] { color: var(--warn); }
+.status-msg[data-kind='error'] { color: var(--err); }
+.status-cursor { font-variant-numeric: tabular-nums; font-family: Consolas, 'Cascadia Mono', monospace; white-space: pre; }
