@@ -13,7 +13,6 @@ mkdir -p out extra
 incs=$(for d in occt/src/*/; do printf -- '-I%s ' "$d"; done)
 libs=$(find occt-build -name 'libTK*.a' | sort | tr '\n' ' ')
 em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
-ninja -C occt-build -t commands > occt-commands.txt
 
 common=(-lembind -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel
   -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB
@@ -37,29 +36,8 @@ for attempt in $(seq 1 12); do
   src=$(find occt/src -name "$cls.cxx" | head -1)
   [ -n "$src" ] || { echo "can't map '$fn' to a source file"; exit 1; }
   echo "recompiling $src at -O1 (miscompiled: $fn)"
-  python3 - "$src" "extra/$cls.o" <<'PY'
-import re, shlex, subprocess, sys
-src, out = sys.argv[1], sys.argv[2]
-name = src.split('/')[-1]
-for line in open('occt-commands.txt'):
-    if (' -c ' in line or line.rstrip().endswith('.cxx')) and '/' + name + ' ' in line + ' ':
-        cmd = line.strip()
-        # ninja runs from occt-build; make paths absolute by running there
-        args = shlex.split(cmd)
-        args = ['-O1' if a in ('-O2', '-O3') else a for a in args]
-        i = args.index('-o'); args[i + 1] = '../' + out
-        args = [a for a in args if not a.startswith(('-MD', '-MF', '-MT'))]
-        # drop dependency-file arguments
-        cleaned = []
-        skip = False
-        for a in args:
-            if skip: skip = False; continue
-            if a in ('-MF', '-MT', '-MQ'): skip = True; continue
-            cleaned.append(a)
-        subprocess.run(cleaned, cwd='occt-build', check=True)
-        sys.exit(0)
-sys.exit('no compile command for ' + name)
-PY
+  # Same flags as the OpenCascade release build, but -O1.
+  em++ -std=c++17 ${FLAGS/-O3/-O1} -DNDEBUG -DNo_Exception $incs -c "$src" -o "extra/$cls.o"
 done
 [ "$msg" = valid ] || { echo "still invalid"; exit 1; }
 
