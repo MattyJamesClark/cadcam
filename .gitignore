@@ -7,3 +7,4 @@ src/renderer/public/vendor/occt/*.js
 src/renderer/public/vendor/occt/*.wasm
 src/renderer/public/vendor/occt/*.txt
 src/renderer/public/vendor/rhino3dm/
+*.tsbuildinfo
