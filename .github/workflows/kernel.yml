@@ -26,12 +26,12 @@ jobs:
           actions-cache-folder: emsdk-cache
       - name: OpenCascade source
         run: git clone --depth 1 --branch "$OCCT_TAG" https://github.com/Open-Cascade-SAS/OCCT.git occt
-      - name: Cache OpenCascade build
+      - name: Restore OpenCascade build
         id: occt-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: occt-build
-          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('.github/workflows/kernel.yml') }}
+          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-wasmeh-v1
       - name: Build OpenCascade
         if: steps.occt-cache.outputs.cache-hit != 'true'
         run: |
@@ -48,17 +48,30 @@ jobs:
             -DUSE_TK=OFF -DUSE_XLIB=OFF -DUSE_RAPIDJSON=OFF -DUSE_DRACO=OFF -DUSE_TBB=OFF -DUSE_VTK=OFF \
             -DUSE_FFMPEG=OFF -DUSE_OPENVR=OFF
           cmake --build occt-build --target TKDESTEP TKDEIGES -- -j4
+      # Save straight away, so a failure in the kernel step doesn't cost an hour of OCCT rebuild.
+      - name: Save OpenCascade build
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: occt-build
+          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-wasmeh-v1
       - name: Build kernel
         run: |
           mkdir -p out
           incs=$(for d in occt/src/*/; do printf -- '-I%s ' "$d"; done)
           libs=$(find occt-build -name 'libTK*.a' | sort | tr '\n' ' ')
           echo "$libs" | tr ' ' '\n' | sed 's#.*/##'
-          em++ -std=c++17 $FLAGS $incs kernel/cadkernel.cpp $libs -lembind \
-            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel \
-            -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB \
-            -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS \
-            -o out/cadkernel.js
+          em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
+          link() {
+            em++ $FLAGS cadkernel.o $libs -lembind "$@" \
+              -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel \
+              -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB \
+              -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS \
+              -o out/cadkernel.js
+          }
+          # Legacy wasm exceptions first; exnref (Chromium 137+, Electron 36+) if binaryen chokes on it.
+          if link; then echo "EH: legacy" > out/BUILD.txt
+          else link -sWASM_LEGACY_EXCEPTIONS=0 && echo "EH: exnref" > out/BUILD.txt; fi
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
           ls -la out
       - uses: actions/upload-artifact@v4
