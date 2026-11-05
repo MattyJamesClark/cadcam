@@ -1,0 +1,1 @@
+EH: legacy, link -O0
