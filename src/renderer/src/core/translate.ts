@@ -47,6 +47,7 @@ class TranslateTool {
   private title!: HTMLElement
   private off: (() => void)[] = []
   private applying = false
+  private snap = 1
 
   constructor(private ctx: ModuleContext) {
     const vp = ctx.viewport
@@ -61,10 +62,13 @@ class TranslateTool {
     this.helper = this.controls.getHelper()
     vp.scene.add(this.helper)
     this.controls.addEventListener('change', () => vp.requestRender())
+    // Dragging snaps to a round step that suits the zoom level (1, 2, 5, 10... mm).
+    this.controls.addEventListener('mouseDown', () => (this.snap = this.snapStep()))
     this.controls.addEventListener('objectChange', () => {
       this.delta.copy(this.pivot.position).sub(this.center)
-      // Whole thousandths of a mm, like the boxes show.
-      this.delta.set(+fmt(this.delta.x), +fmt(this.delta.y), +fmt(this.delta.z))
+      const r = (v: number): number => +fmt(Math.round(v / this.snap) * this.snap)
+      this.delta.set(r(this.delta.x), r(this.delta.y), r(this.delta.z))
+      this.pivot.position.copy(this.center).add(this.delta)
       this.showValues()
       this.preview()
     })
@@ -88,6 +92,19 @@ class TranslateTool {
 
     this.retarget()
     this.focus()
+  }
+
+  private snapStep(): number {
+    const vp = this.ctx.viewport
+    const cam = vp.camera
+    const h =
+      (cam as THREE.OrthographicCamera).isOrthographicCamera
+        ? ((cam as THREE.OrthographicCamera).top - (cam as THREE.OrthographicCamera).bottom) / (cam as THREE.OrthographicCamera).zoom
+        : 2 * vp.nav.pose.dist * Math.tan(THREE.MathUtils.degToRad((cam as THREE.PerspectiveCamera).fov / 2))
+    const raw = h / 150
+    const p = Math.pow(10, Math.floor(Math.log10(raw)))
+    const m = raw / p
+    return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p
   }
 
   focus(): void {
