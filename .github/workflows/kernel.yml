@@ -6,7 +6,7 @@ name: CAD kernel
 # releases don't depend on this (slow) build.
 on:
   push:
-    paths: ['kernel/**', '.github/workflows/kernel.yml']
+    paths: ['kernel/*.cpp', 'kernel/CMakeLists.txt', '.github/workflows/kernel.yml']
   workflow_dispatch:
 
 permissions:
@@ -14,13 +14,26 @@ permissions:
 
 env:
   OCCT_TAG: V7_9_3
-  EMSDK_VERSION: 4.0.20
-  FLAGS: -O3 -fwasm-exceptions
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 340
+    # Two toolchains: emsdk 4.0.20 with legacy EH produced an invalid module
+    # (LLVM br_table arity bug), so try an older emsdk and the new exnref EH.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: em3-legacy
+            emsdk: 3.1.74
+            flags: -O3 -fwasm-exceptions
+          - variant: em4-exnref
+            emsdk: 4.0.20
+            flags: -O3 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0
+    env:
+      EMSDK_VERSION: ${{ matrix.emsdk }}
+      FLAGS: ${{ matrix.flags }}
     steps:
       - uses: actions/checkout@v4
       - uses: mymindstorm/setup-emsdk@v14
@@ -34,7 +47,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: occt-build
-          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-wasmeh-v1
+          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-${{ matrix.variant }}-v1
       - name: Build OpenCascade
         if: steps.occt-cache.outputs.cache-hit != 'true'
         run: |
@@ -57,7 +70,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: occt-build
-          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-wasmeh-v1
+          key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-${{ matrix.variant }}-v1
       - name: Build kernel
         run: |
           mkdir -p out
@@ -66,7 +79,7 @@ jobs:
           echo "$libs" | tr ' ' '\n' | sed 's#.*/##'
           em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
           link() {
-            em++ -fwasm-exceptions cadkernel.o $libs -lembind "$@" \
+            em++ $FLAGS cadkernel.o $libs -lembind "$@" \
               -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel \
               -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB \
               -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS \
@@ -75,9 +88,8 @@ jobs:
           # Legacy wasm exceptions first; exnref (Chromium 137+, Electron 36+) if binaryen chokes on it.
           # Objects are already -O3; the link-time wasm-opt pass is a bonus, and some
           # binaryen versions fail to parse large EH modules, so fall back without it.
-          if link -O3; then echo "EH: legacy, link -O3" > out/BUILD.txt
-          elif link -O3 -sWASM_LEGACY_EXCEPTIONS=0; then echo "EH: exnref, link -O3" > out/BUILD.txt
-          elif link -O0; then echo "EH: legacy, link -O0" > out/BUILD.txt
+          if link -O3; then echo "${{ matrix.variant }}, link -O3" > out/BUILD.txt
+          elif link -O0; then echo "${{ matrix.variant }}, link -O0" > out/BUILD.txt
           else echo "all links failed"; exit 1; fi
           cat out/BUILD.txt
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
@@ -86,7 +98,7 @@ jobs:
       # tested and then merged into main with the app changes that use it.
       - name: Commit kernel
         run: |
-          dest=src/renderer/public/vendor/cadkernel
+          dest=kernel/builds/${{ matrix.variant }}
           mkdir -p $dest
           cp out/cadkernel.js out/cadkernel.wasm out/BUILD.txt $dest/
           cp out/LICENSE* $dest/ 2>/dev/null || true
@@ -94,4 +106,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add $dest
           git commit -m "Built CAD kernel ($(cat out/BUILD.txt))" || exit 0
-          git push origin HEAD:${GITHUB_REF_NAME}
+          for i in 1 2 3 4; do git pull --rebase -q origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break; sleep 5; done
