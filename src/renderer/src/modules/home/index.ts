@@ -3,6 +3,7 @@ import { openTranslate } from '@/core/translate'
 import { importerFor, listExporters, listImporters, loadFile, partMaterial, unsupportedReason } from '@/core/io'
 import { icons } from '@/core/icons'
 import type { CadModule, ModuleContext } from '@/core/types'
+import { readCadFile, writeCadFile } from '@/core/occt'
 import { isProject, PROJECT_EXT, readProject, saveProject } from '@/core/project'
 
 interface PickedFile {
@@ -201,14 +202,39 @@ function primParams(kind: string, geo: THREE.BufferGeometry): Record<string, unk
 }
 
 let counter = 0
-function addPrimitive(ctx: ModuleContext, kind: string, geo: THREE.BufferGeometry, z: number): void {
+
+/** Tessellated B-rep of a primitive: written by the kernel, read straight back. */
+async function kernelSolid(kind: string, prim: Record<string, unknown>): Promise<THREE.BufferGeometry | null> {
+  const { bytes } = await writeCadFile('brep', { name: kind, kind: 'body', prim })
+  const root = await readCadFile('brep', bytes.slice().buffer)
+  root.updateMatrixWorld(true)
+  let found: THREE.Mesh | null = null
+  root.traverse((o) => {
+    if (!found && (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.userData.brep) found = o as THREE.Mesh
+  })
+  if (!found) return null
+  const m = found as THREE.Mesh
+  const g = m.geometry
+  if (!m.matrixWorld.equals(new THREE.Matrix4())) return null // the writer places the body itself; expect identity
+  g.computeBoundingBox()
+  return g
+}
+async function addPrimitive(ctx: ModuleContext, kind: string, geo: THREE.BufferGeometry, z: number): Promise<void> {
   // Sit on the XY plane, to the right of whatever is already there.
   geo.computeBoundingBox()
   const existing = ctx.doc.bounds()
   const x = existing.isEmpty() ? 0 : existing.max.x + 20 - geo.boundingBox!.min.x
   geo.translate(x, 0, z)
   geo.computeBoundingBox()
-  geo.userData.prim = primParams(kind, geo)
+  const prim = primParams(kind, geo)
+  // Build it as a true solid in the CAD kernel, so its faces, edges and points
+  // can be picked and measured like an imported part. The plain mesh is only a fallback.
+  const exact = prim ? await kernelSolid(kind, prim).catch(() => null) : null
+  if (exact) {
+    geo.dispose()
+    geo = exact
+  }
+  geo.userData.prim = prim
   const mesh = new THREE.Mesh(geo, partMaterial())
   ctx.doc.addBody(mesh, `${kind} ${++counter}`, kind)
   ctx.viewport.fitAll()
@@ -285,20 +311,20 @@ export const homeModule: CadModule = {
           id: 'shape.box',
           label: 'Box',
           icon: icons.box,
-          run: (ctx) => addPrimitive(ctx, 'Box', new THREE.BoxGeometry(100, 60, 40), 20)
+          run: (ctx) => void addPrimitive(ctx, 'Box', new THREE.BoxGeometry(100, 60, 40), 20)
         },
         {
           id: 'shape.cylinder',
           label: 'Cylinder',
           icon: icons.cylinder,
           run: (ctx) =>
-            addPrimitive(ctx, 'Cylinder', new THREE.CylinderGeometry(25, 25, 80, 96).rotateX(Math.PI / 2), 40)
+            void addPrimitive(ctx, 'Cylinder', new THREE.CylinderGeometry(25, 25, 80, 96).rotateX(Math.PI / 2), 40)
         },
         {
           id: 'shape.sphere',
           label: 'Sphere',
           icon: icons.sphere,
-          run: (ctx) => addPrimitive(ctx, 'Sphere', new THREE.SphereGeometry(30, 96, 48), 30)
+          run: (ctx) => void addPrimitive(ctx, 'Sphere', new THREE.SphereGeometry(30, 96, 48), 30)
         }
       ]
     },
