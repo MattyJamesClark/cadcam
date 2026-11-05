@@ -15,7 +15,8 @@ export const IPC = {
   updateInstall: 'update:install',
   appInfo: 'app:info',
   openFile: 'file:open',
-  saveFile: 'file:save'
+  saveFile: 'file:save',
+  writeFile: 'file:write'
 } as const
 
 export interface AppInfo {

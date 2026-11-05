@@ -6,6 +6,7 @@ const api = {
   openFiles: (filters: FileFilter[]): Promise<OpenedFile[]> => ipcRenderer.invoke(IPC.openFile, filters),
   saveFile: (name: string, filters: FileFilter[], data: Uint8Array): Promise<string | null> =>
     ipcRenderer.invoke(IPC.saveFile, name, filters, data),
+  writeFile: (path: string, data: Uint8Array): Promise<boolean> => ipcRenderer.invoke(IPC.writeFile, path, data),
   updates: {
     status: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.updateStatus),
     check: (): Promise<void> => ipcRenderer.invoke(IPC.updateCheck),

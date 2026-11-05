@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Emitter } from './events'
+import { History } from './history'
 
 /** part = one CAD part that holds several bodies. */
 export type NodeKind = 'file' | 'assembly' | 'part' | 'body'
@@ -71,6 +72,10 @@ export class CadDocument extends Emitter<DocEvents> {
   private nodes = new Map<string, DocNode>()
   private selected = new Set<string>()
   name = 'Untitled'
+  /** Where the project was last saved / opened from (.ccs), if anywhere. */
+  filePath: string | null = null
+  /** Undo / redo of everything that changes the model. */
+  readonly history = new History()
 
   constructor() {
     super()
@@ -130,6 +135,40 @@ export class CadDocument extends Emitter<DocEvents> {
     dedupeNames(file)
     this.roots.push(file)
     this.root.add(object)
+    this.recordAdd(file, `Import ${opts.source ?? opts.name}`)
+    this.emit('changed', undefined)
+    return file
+  }
+
+  /** addRestored, recorded for undo (merging a project into the design). */
+  addRestoredUndoable(object: THREE.Object3D, meta: { name: string; detail?: string; source?: string; props?: Record<string, string> }): DocNode {
+    const n = this.addRestored(object, meta)
+    this.recordAdd(n, `Import ${meta.name}`)
+    return n
+  }
+
+  /** Re-add a node tree saved in a project file, exactly as it was. */
+  addRestored(object: THREE.Object3D, meta: { name: string; detail?: string; source?: string; props?: Record<string, string> }): DocNode {
+    const restore = (obj: THREE.Object3D, parent: DocNode | null): DocNode | null => {
+      const info = obj.userData.__node as { name: string; kind: NodeKind; detail?: string; expanded?: boolean } | undefined
+      let node: DocNode | null = null
+      if (info) {
+        node = info.kind === 'body' ? this.makeBody(obj, info.name, parent) : this.makeNode(obj, info.name, info.kind, parent)
+        node.detail = info.detail
+        node.expanded = !!info.expanded
+        delete obj.userData.__node
+        if (info.kind === 'body') return node
+      }
+      for (const c of obj.children) restore(c, node ?? parent)
+      return node
+    }
+    const file = restore(object, null) ?? this.makeNode(object, meta.name, 'file', null)
+    if (file.kind === 'file') {
+      file.source = meta.source
+      if (meta.props) file.props = meta.props
+    }
+    this.roots.push(file)
+    this.root.add(object)
     this.emit('changed', undefined)
     return file
   }
@@ -140,6 +179,7 @@ export class CadDocument extends Emitter<DocEvents> {
     n.detail = detail
     this.roots.push(n)
     this.root.add(object)
+    this.recordAdd(n, `Add ${name}`)
     this.emit('changed', undefined)
     return n
   }
@@ -188,49 +228,159 @@ export class CadDocument extends Emitter<DocEvents> {
   remove(id: string): void {
     const n = this.nodes.get(id)
     if (!n) return
-    n.object.parent?.remove(n.object)
-    // Dispose only what nobody else uses: geometry/material of this subtree.
-    n.object.traverse((o) => {
-      const m = o as THREE.Mesh
-      m.geometry?.dispose()
-    })
-    for (const d of collect(n)) {
-      this.nodes.delete(d.id)
-      this.selected.delete(d.id)
-    }
-    const siblings = n.parent ? n.parent.children : this.roots
-    siblings.splice(siblings.indexOf(n), 1)
-    // Drop assemblies/files left empty.
-    if (n.parent && n.parent.children.length === 0) this.remove(n.parent.id)
+    this.history.batch(`Delete ${n.name}`, () => this.removeNode(n))
     this.emit('selection', this.selection())
     this.emit('changed', undefined)
   }
 
+  /** Delete several nodes as one undo step. */
+  removeMany(ids: string[]): void {
+    const list = ids.map((i) => this.nodes.get(i)).filter((n): n is DocNode => !!n)
+    if (!list.length) return
+    this.history.batch(list.length === 1 ? `Delete ${list[0].name}` : `Delete ${list.length} items`, () =>
+      list.forEach((n) => this.nodes.has(n.id) && this.removeNode(n))
+    )
+    this.emit('selection', this.selection())
+    this.emit('changed', undefined)
+  }
+
+  private removeNode(n: DocNode): void {
+    const slot = this.detach(n)
+    this.history.record({
+      label: `Delete ${n.name}`,
+      undo: () => this.attach(slot),
+      redo: () => void this.detach(n),
+      // Free GPU memory only once the delete can't be undone any more.
+      dispose: (applied) => applied && disposeObject(n.object)
+    })
+    // Drop assemblies/files left empty.
+    if (slot.parent && slot.parent.children.length === 0) this.removeNode(slot.parent)
+  }
+
+  private recordAdd(n: DocNode, label: string): void {
+    let slot: Slot | null = null
+    this.history.record({
+      label,
+      undo: () => void (slot = this.detach(n)),
+      redo: () => slot && this.attach(slot),
+      dispose: (applied) => !applied && disposeObject(n.object)
+    })
+  }
+
+  /** Take a node (and its subtree) out of the document, remembering where it was. */
+  private detach(n: DocNode): Slot {
+    const siblings = n.parent ? n.parent.children : this.roots
+    const objParent = n.object.parent ?? this.root
+    const slot: Slot = {
+      node: n,
+      parent: n.parent,
+      index: siblings.indexOf(n),
+      objParent,
+      objIndex: objParent.children.indexOf(n.object)
+    }
+    siblings.splice(slot.index, 1)
+    objParent.remove(n.object)
+    for (const d of collect(n)) {
+      this.nodes.delete(d.id)
+      this.selected.delete(d.id)
+    }
+    return slot
+  }
+
+  private attach(slot: Slot): void {
+    const n = slot.node
+    const siblings = slot.parent ? slot.parent.children : this.roots
+    siblings.splice(Math.min(slot.index, siblings.length), 0, n)
+    slot.objParent.add(n.object)
+    const kids = slot.objParent.children
+    kids.splice(kids.indexOf(n.object), 1)
+    kids.splice(Math.min(slot.objIndex, kids.length), 0, n.object)
+    for (const d of collect(n)) this.nodes.set(d.id, d)
+  }
+
+  /** Empty the document (undoable). */
   clear(): void {
-    for (const n of [...this.roots]) this.remove(n.id)
+    const name = this.name
+    const path = this.filePath
+    this.history.batch('New', () => {
+      for (const n of [...this.roots]) this.removeNode(n)
+      this.history.record({
+        label: 'New',
+        undo: () => {
+          this.name = name
+          this.filePath = path
+        },
+        redo: () => {
+          this.name = 'Untitled'
+          this.filePath = null
+        }
+      })
+    })
     this.name = 'Untitled'
+    this.filePath = null
+    this.emit('selection', this.selection())
+    this.emit('changed', undefined)
+  }
+
+  /** Empty the document and forget its history (when opening a project). */
+  reset(): void {
+    for (const n of [...this.roots]) {
+      this.detach(n)
+      disposeObject(n.object)
+    }
+    this.selected.clear()
+    this.history.reset()
+    this.name = 'Untitled'
+    this.filePath = null
+    this.emit('selection', [])
     this.emit('changed', undefined)
   }
 
   rename(id: string, name: string): void {
     const n = this.nodes.get(id)
-    if (!n) return
+    if (!n || n.name === name) return
+    const old = n.name
     n.name = name
+    this.history.record({ label: `Rename ${old} to ${name}`, undo: () => (n.name = old), redo: () => (n.name = name) })
     this.emit('changed', undefined)
   }
 
   setVisible(id: string | string[], visible: boolean): void {
-    for (const i of Array.isArray(id) ? id : [id]) {
-      const n = this.nodes.get(i)
-      if (n) n.object.visible = visible
+    const list = (Array.isArray(id) ? id : [id]).map((i) => this.nodes.get(i)).filter((n): n is DocNode => !!n)
+    const changed = list.filter((n) => n.object.visible !== visible)
+    changed.forEach((n) => (n.object.visible = visible))
+    if (changed.length) {
+      const what = changed.length === 1 ? changed[0].name : `${changed.length} items`
+      this.history.record({
+        label: `${visible ? 'Show' : 'Hide'} ${what}`,
+        undo: () => changed.forEach((n) => (n.object.visible = !visible)),
+        redo: () => changed.forEach((n) => (n.object.visible = visible))
+      })
     }
+    this.emit('changed', undefined)
+  }
+
+  /** Undo the last `steps` changes. */
+  undo(steps = 1): void {
+    this.history.undo(steps)
+    this.emit('selection', this.selection())
+    this.emit('changed', undefined)
+  }
+
+  redo(steps = 1): void {
+    this.history.redo(steps)
+    this.emit('selection', this.selection())
     this.emit('changed', undefined)
   }
 
   /** Make everything visible again. */
   showAll(): void {
-    this.all().forEach((n) => (n.object.visible = true))
-    this.emit('changed', undefined)
+    this.setVisible(
+      this.all()
+        .filter((n) => !n.object.visible)
+        .map((n) => n.id),
+      true
+    )
   }
 
   setExpanded(id: string, expanded: boolean): void {
@@ -357,6 +507,22 @@ export class CadDocument extends Emitter<DocEvents> {
     }
     return box
   }
+}
+
+interface Slot {
+  node: DocNode
+  parent: DocNode | null
+  index: number
+  objParent: THREE.Object3D
+  objIndex: number
+}
+
+/** Free the GPU buffers of an object tree (geometry may be shared; three re-uploads if still used). */
+function disposeObject(o: THREE.Object3D): void {
+  o.traverse((c) => {
+    const m = c as THREE.Mesh
+    m.geometry?.dispose()
+  })
 }
 
 function collect(n: DocNode): DocNode[] {

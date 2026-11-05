@@ -22,6 +22,10 @@ export interface Command {
   tooltip?: string
   /** Keyboard shortcut, e.g. "F", "Ctrl+I", "Shift+5". Works from any tab. */
   shortcut?: string
+  /** A second shortcut for the same command (e.g. Ctrl+Shift+Z for redo). */
+  altShortcut?: string
+  /** Shown in menus but not the ribbon. */
+  menuOnly?: boolean
   run(ctx: ModuleContext): void | Promise<void>
   isEnabled?(ctx: ModuleContext): boolean
   /** For toggles: draw the button as pressed. */

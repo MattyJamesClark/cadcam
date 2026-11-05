@@ -39,6 +39,12 @@ export const icons = {
   assembly: svg('<path d="M3 8l5-3 5 3v6l-5 3-5-3z"/><path d="M11 13l5-3 5 3v6l-5 3-5-3z"/>'),
   layers: svg('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/>'),
   curve: svg('<path d="M4 19c3-10 6-14 9-9s5 2 7-5"/><circle cx="4" cy="19" r="1.5"/><circle cx="20" cy="5" r="1.5"/>'),
+  save: svg('<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3"/><rect x="8" y="13" width="8" height="6"/>'),
+  saveAs: svg('<path d="M5 3h11l3 3v7"/><path d="M5 3v18h7"/><path d="M8 3v5h7V3"/><path d="m14 21 1-3 5-5 2 2-5 5z"/>'),
+  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
+  redo: svg('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
+  history: svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/>'),
+  menu: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
   chevron: svg('<path d="m9 6 6 6-6 6"/>'),
   hlr: svg('<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="m4 7 8 4 8-4M12 11v10"/>'),
   update: svg('<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/>')

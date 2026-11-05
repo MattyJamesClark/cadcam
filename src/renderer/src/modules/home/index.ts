@@ -2,10 +2,13 @@ import * as THREE from 'three'
 import { importerFor, listExporters, listImporters, loadFile, partMaterial, unsupportedReason } from '@/core/io'
 import { icons } from '@/core/icons'
 import type { CadModule, ModuleContext } from '@/core/types'
+import { isProject, PROJECT_EXT, readProject, saveProject } from '@/core/project'
 
 interface PickedFile {
   name: string
   data: ArrayBuffer
+  /** Full path on disk (desktop app only). */
+  path?: string
 }
 
 /** Ask for files: native dialog in the app, <input type=file> in a plain browser. */
@@ -14,13 +17,15 @@ async function pickFiles(): Promise<PickedFile[]> {
   const host = window.host
   if (host) {
     const files = await host.openFiles([
-      { name: 'All supported 3D files', extensions: exts },
+      { name: 'All supported files', extensions: [PROJECT_EXT, ...exts] },
+      { name: 'CADCAM Studio project', extensions: [PROJECT_EXT] },
       { name: 'CAD solids (STEP, IGES, BREP, 3DM)', extensions: listImporters().filter((i) => i.solid || i.extensions.includes('3dm')).flatMap((i) => i.extensions) },
       ...listImporters().map((i) => ({ name: i.name, extensions: i.extensions })),
       { name: 'All files', extensions: ['*'] }
     ])
     return files.map((f) => ({
       name: f.name,
+      path: f.path,
       data: f.data.buffer.slice(f.data.byteOffset, f.data.byteOffset + f.data.byteLength) as ArrayBuffer
     }))
   }
@@ -28,7 +33,7 @@ async function pickFiles(): Promise<PickedFile[]> {
     const input = document.createElement('input')
     input.type = 'file'
     input.multiple = true
-    input.accept = exts.map((e) => '.' + e).join(',')
+    input.accept = [PROJECT_EXT, ...exts].map((e) => '.' + e).join(',')
     input.onchange = async () => {
       const list = [...(input.files ?? [])]
       resolve(await Promise.all(list.map(async (f) => ({ name: f.name, data: await f.arrayBuffer() }))))
@@ -37,13 +42,27 @@ async function pickFiles(): Promise<PickedFile[]> {
   })
 }
 
-/** Load files into the document. Used by Import, Merge and drag-and-drop. */
+/**
+ * Load files into the document. Used by Open (replace), Import/Merge and
+ * drag-and-drop. Everything is read first and then added in one undo step, so
+ * a failed read never leaves the design half replaced.
+ */
 export async function importFiles(ctx: ModuleContext, files: PickedFile[], replace: boolean): Promise<void> {
   if (!files.length) return
-  if (replace) ctx.doc.clear()
-  let ok = 0
   const tAll = performance.now()
+  type Loaded =
+    | { kind: 'model'; f: PickedFile; obj: THREE.Object3D; format: string }
+    | { kind: 'project'; f: PickedFile; project: ReturnType<typeof readProject> }
+  const loaded: Loaded[] = []
   for (const f of files) {
+    if (f.name.toLowerCase().endsWith('.' + PROJECT_EXT) || isProject(f.data)) {
+      try {
+        loaded.push({ kind: 'project', f, project: readProject(f.data) })
+      } catch (e) {
+        ctx.status(`${f.name}: ${(e as Error).message ?? e}`, 'error')
+      }
+      continue
+    }
     const imp = importerFor(f.name)
     if (!imp) {
       ctx.status(unsupportedReason(f.name), 'warn')
@@ -51,29 +70,82 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
     }
     const t0 = performance.now()
     ctx.status(`Reading ${f.name}${imp.solid ? ' with the CAD kernel' : ''}…`)
-    let obj
     try {
-      obj = await loadFile(imp, f.data, f.name, (stage, done, total) =>
+      const obj = await loadFile(imp, f.data, f.name, (stage, done, total) =>
         ctx.status(`${f.name}: ${stage}${total ? ` ${done} of ${total}` : ''}…`)
       )
+      loaded.push({ kind: 'model', f, obj, format: imp.name })
+      console.info(`Imported ${f.name} in ${(performance.now() - t0).toFixed(0)} ms`)
     } catch (e) {
       ctx.status(`${f.name}: couldn't read it (${(e as Error).message ?? e})`, 'error')
-      continue
     }
-    const base = f.name.replace(/\.[^.]+$/, '')
-    const node = ctx.doc.addFile(obj, { name: base, format: imp.name, source: f.name })
-    if (ctx.doc.bodies(node).length > 1) node.expanded = true
-    ok++
-    console.info(`Imported ${f.name} in ${(performance.now() - t0).toFixed(0)} ms`)
   }
-  if (replace && files.length === 1) ctx.doc.name = files[0].name
-  ctx.doc.emit('changed', undefined)
-  if (ok) {
-    ctx.viewport.fitAll()
-    const secs = ((performance.now() - tAll) / 1000).toFixed(1)
-    const what = ok === 1 && files.length === 1 ? files[0].name : `${ok} files`
-    ctx.status(`${replace ? 'Opened' : 'Merged'} ${what} in ${secs} s`, 'success')
+  if (!loaded.length) return
+
+  const doc = ctx.doc
+  // Opening one project replaces the design and starts a fresh history.
+  const single = loaded.length === 1 ? loaded[0] : null
+  if (replace && single?.kind === 'project') {
+    doc.reset()
+    for (const r of single.project.roots) doc.addRestored(r.object, r.meta)
+    doc.name = single.f.name
+    doc.filePath = single.f.path ?? null
+    doc.history.markSaved()
+  } else {
+    const label = replace ? `Open ${single ? single.f.name : `${loaded.length} files`}` : `Import ${single ? single.f.name : `${loaded.length} files`}`
+    doc.history.batch(label, () => {
+      if (replace) doc.clear()
+      for (const l of loaded) {
+        if (l.kind === 'project') {
+          for (const r of l.project.roots) doc.addRestoredUndoable(r.object, r.meta)
+          continue
+        }
+        const base = l.f.name.replace(/\.[^.]+$/, '')
+        const node = doc.addFile(l.obj, { name: base, format: l.format, source: l.f.name })
+        if (doc.bodies(node).length > 1) node.expanded = true
+      }
+    })
+    if (replace && single) doc.name = single.f.name
   }
+  doc.emit('changed', undefined)
+  ctx.viewport.fitAll()
+  const secs = ((performance.now() - tAll) / 1000).toFixed(1)
+  const what = single ? single.f.name : `${loaded.length} files`
+  ctx.status(`${replace ? 'Opened' : 'Merged'} ${what} in ${secs} s`, 'success')
+}
+
+/** Save the design as a project file. `as` always asks where. */
+export async function saveDesign(ctx: ModuleContext, as: boolean): Promise<boolean> {
+  const doc = ctx.doc
+  const host = window.host
+  const version = host ? (await host.appInfo()).version : undefined
+  const bytes = saveProject(doc, version)
+  const base = doc.name.replace(/\.[^.]+$/, '') || 'Untitled'
+  if (host) {
+    let path: string | null = null
+    if (!as && doc.filePath && (await host.writeFile(doc.filePath, bytes))) path = doc.filePath
+    else path = await host.saveFile(`${base}.${PROJECT_EXT}`, [{ name: 'CADCAM Studio project', extensions: [PROJECT_EXT] }], bytes)
+    if (!path) return false
+    doc.filePath = path
+    doc.name = path.split(/[\\/]/).pop() ?? doc.name
+  } else {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([bytes as BlobPart]))
+    a.download = `${base}.${PROJECT_EXT}`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    doc.name = a.download
+  }
+  doc.history.markSaved()
+  doc.emit('changed', undefined)
+  ctx.status(`Saved ${doc.name} (${(bytes.byteLength / 1e6).toFixed(1)} MB)`, 'success')
+  return true
+}
+
+/** Before throwing the design away: true if it's fine to continue. */
+export async function confirmDiscard(ctx: ModuleContext, action: string): Promise<boolean> {
+  if (ctx.doc.isEmpty() || !ctx.doc.history.dirty) return true
+  return confirm(`${action}? Unsaved changes to ${ctx.doc.name} will be lost (you can still undo it).`)
 }
 
 async function exportAs(ctx: ModuleContext, ext: string): Promise<void> {
@@ -131,8 +203,8 @@ export const homeModule: CadModule = {
           icon: icons.newDoc,
           shortcut: 'Ctrl+N',
           tooltip: 'Start an empty design',
-          run: (ctx) => {
-            if (hasItems(ctx) && !confirm('Discard the current design?')) return
+          run: async (ctx) => {
+            if (!(await confirmDiscard(ctx, 'Start a new design'))) return
             ctx.doc.clear()
             ctx.viewport.fitAll()
           }
@@ -145,7 +217,7 @@ export const homeModule: CadModule = {
           tooltip: 'Open a file, replacing the current design',
           run: async (ctx) => {
             const files = await pickFiles()
-            if (files.length && hasItems(ctx) && !confirm('Replace the current design?')) return
+            if (!files.length || !(await confirmDiscard(ctx, 'Open another design'))) return
             await importFiles(ctx, files, true)
           }
         },
@@ -156,6 +228,22 @@ export const homeModule: CadModule = {
           shortcut: 'Ctrl+I',
           tooltip: 'Add files to the current design',
           run: async (ctx) => importFiles(ctx, await pickFiles(), false)
+        },
+        {
+          id: 'file.save',
+          label: 'Save',
+          icon: icons.save,
+          shortcut: 'Ctrl+S',
+          tooltip: 'Save the design as a CADCAM Studio project (.ccs)',
+          run: (ctx) => void saveDesign(ctx, false)
+        },
+        {
+          id: 'file.save-as',
+          label: 'Save As',
+          icon: icons.saveAs,
+          shortcut: 'Ctrl+Shift+S',
+          tooltip: 'Save the design under a new name',
+          run: (ctx) => void saveDesign(ctx, true)
         }
       ]
     },
@@ -191,6 +279,33 @@ export const homeModule: CadModule = {
       label: 'Edit',
       commands: [
         {
+          id: 'edit.undo',
+          label: 'Undo',
+          icon: icons.undo,
+          shortcut: 'Ctrl+Z',
+          tooltip: 'Undo the last change',
+          isEnabled: (ctx) => ctx.doc.history.canUndo,
+          run: (ctx) => {
+            const label = ctx.doc.history.undoLabels.at(-1)
+            ctx.doc.undo()
+            ctx.status(`Undid: ${label}`)
+          }
+        },
+        {
+          id: 'edit.redo',
+          label: 'Redo',
+          icon: icons.redo,
+          shortcut: 'Ctrl+Y',
+          altShortcut: 'Ctrl+Shift+Z',
+          tooltip: 'Redo what was undone',
+          isEnabled: (ctx) => ctx.doc.history.canRedo,
+          run: (ctx) => {
+            const label = ctx.doc.history.redoLabels[0]
+            ctx.doc.redo()
+            ctx.status(`Redid: ${label}`)
+          }
+        },
+        {
           id: 'edit.hide',
           label: 'Hide / Show',
           icon: icons.eyeOff,
@@ -222,7 +337,7 @@ export const homeModule: CadModule = {
           shortcut: 'Delete',
           tooltip: 'Delete selected items',
           isEnabled: (ctx) => ctx.doc.selection().length > 0,
-          run: (ctx) => ctx.doc.selectedTopNodes().forEach((n) => ctx.doc.remove(n.id))
+          run: (ctx) => ctx.doc.removeMany(ctx.doc.selectedTopNodes().map((n) => n.id))
         }
       ]
     }
