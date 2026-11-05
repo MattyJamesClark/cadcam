@@ -92,7 +92,20 @@ jobs:
           valid() { "$EMSDK_NODE" -e "new WebAssembly.Module(require('fs').readFileSync('out/cadkernel.wasm'))"; }
           if link -O3 && valid; then echo "${{ matrix.variant }}, link -O3" > out/BUILD.txt
           elif link -O0 && valid; then echo "${{ matrix.variant }}, link -O0" > out/BUILD.txt
-          else echo "no valid kernel"; exit 1; fi
+          else
+            echo "no valid kernel; finding the function V8 rejects"
+            mkdir -p dbg
+            EMCC_DEBUG=1 em++ $FLAGS cadkernel.o $libs -lembind --profiling-funcs -O0 -sMODULARIZE=1 -sEXPORT_ES6=1 \
+              -sALLOW_MEMORY_GROWTH=1 -o dbg/k.js > dbg/log.txt 2>&1 || true
+            for w in $(find /tmp/emscripten_temp* dbg -name '*.wasm' 2>/dev/null); do
+              echo "== $w"
+              msg=$("$EMSDK_NODE" -e "try{new WebAssembly.Module(require('fs').readFileSync('$w'));console.log('valid')}catch(e){console.log(e.message)}")
+              echo "$msg"
+              n=$(echo "$msg" | grep -oE 'function #[0-9]+' | grep -oE '[0-9]+' | head -1)
+              [ -n "$n" ] && "$EMSDK_NODE" kernel/wasm-fn-name.mjs "$w" "$n"
+            done
+            exit 1
+          fi
           cat out/BUILD.txt
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
           ls -la out
