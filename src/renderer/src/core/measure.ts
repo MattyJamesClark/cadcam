@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { ModuleContext } from './types'
 import { datums } from './datums'
 import { measureCad, type MeasureResult, type Vec3 } from './occt'
-import { Highlights, pickAt, pickKey, rowMajor, selectFilter, type Pick, type SelectFilter } from './picking'
+import { dotMaterial, Highlights, pickAt, pickKey, rowMajor, selectFilter, type Pick, type SelectFilter } from './picking'
 import { el, fmt, resultRows, toolPanel } from './toolpanel'
 
 /**
@@ -288,7 +288,7 @@ class MeasureTool {
     const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([...a.toArray(), ...b.toArray()], 3))
     const line = new THREE.LineSegments(g, new THREE.LineDashedMaterial({ color, depthTest: false, dashSize: 1e9, gapSize: 0 }))
     line.renderOrder = 13
-    const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 7, sizeAttenuation: false, depthTest: false }))
+    const pts = new THREE.Points(g, dotMaterial(color, 9))
     pts.renderOrder = 13
     this.dims.add(line, pts)
     const label = el('div', 'dim-label', fmt(a.distanceTo(b)))

@@ -248,7 +248,7 @@ function build(pick: Pick, color: number): THREE.Object3D {
   const geo = (pick.object as THREE.Mesh).geometry
   if (pick.kind === 'vertex' || pick.kind === 'point') {
     const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pick.point.toArray(), 3))
-    const p = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 11, sizeAttenuation: false, depthTest: false }))
+    const p = new THREE.Points(g, dotMaterial(color, 12))
     p.renderOrder = 12
     return p
   }
@@ -315,6 +315,12 @@ export function snapPoints(geo: THREE.BufferGeometry): { points: Float32Array; k
         continue
       }
       const circle = fitCircle(pts)
+      const closedLoop = pts[0].distanceToSquared(pts[pts.length - 1]) < 1e-12 * (1 + pts[0].lengthSq())
+      // Arcs and open curves: the point halfway along.
+      if (!closedLoop) {
+        out.push(...halfway(pts).toArray())
+        kinds.push('mid')
+      }
       if (!circle) continue
       const { c, n, r, closed } = circle
       if (closed) seamEnds.push(pts[0])
@@ -378,6 +384,36 @@ function fitCircle(pts: THREE.Vector3[]): { c: THREE.Vector3; n: THREE.Vector3; 
     if (Math.abs(p.clone().sub(c).dot(n)) > r * 0.01 + 1e-6) return null
   }
   return { c, n, r, closed }
+}
+
+function halfway(pts: THREE.Vector3[]): THREE.Vector3 {
+  const lens = pts.map((p, i) => (i ? p.distanceTo(pts[i - 1]) : 0))
+  let half = lens.reduce((a, b) => a + b, 0) / 2
+  for (let i = 1; i < pts.length; i++) {
+    if (half <= lens[i]) return pts[i - 1].clone().lerp(pts[i], lens[i] > 0 ? half / lens[i] : 0)
+    half -= lens[i]
+  }
+  return pts[pts.length - 1].clone()
+}
+
+let dotTexture: THREE.Texture | null = null
+/** Round point markers (plain points draw as squares). */
+export function dotMaterial(color: number, size: number): THREE.PointsMaterial {
+  if (!dotTexture) {
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')!
+    g.beginPath()
+    g.arc(32, 32, 26, 0, Math.PI * 2)
+    g.fillStyle = '#fff'
+    g.fill()
+    g.lineWidth = 6
+    g.strokeStyle = 'rgba(0,0,0,0.55)'
+    g.stroke()
+    dotTexture = new THREE.CanvasTexture(c)
+    dotTexture.colorSpace = THREE.SRGBColorSpace
+  }
+  return new THREE.PointsMaterial({ color, size, sizeAttenuation: false, depthTest: false, map: dotTexture, transparent: true, alphaTest: 0.3 })
 }
 
 function onPolyline(p: THREE.Vector3, pts: THREE.Vector3[], tol: number): boolean {

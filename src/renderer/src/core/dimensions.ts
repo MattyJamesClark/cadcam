@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { ModuleContext } from './types'
 import type { Dimension } from './document'
 import { datums } from './datums'
+import { dotMaterial } from './picking'
 import { el } from './toolpanel'
 
 /**
@@ -92,7 +93,7 @@ class DimensionLayer {
       this.group.add(lines)
       if (segs.points.length) {
         const pg = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(segs.points, 3))
-        const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color, size: 6, sizeAttenuation: false, depthTest: false }))
+        const pts = new THREE.Points(pg, dotMaterial(color, 8))
         pts.renderOrder = 8
         this.group.add(pts as unknown as THREE.LineSegments)
       }

@@ -74,6 +74,8 @@
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_ListIteratorOfListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Face.hxx>
@@ -202,6 +204,19 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
   // Model edges as line segments sampled from the true curves.
   TopTools_IndexedMapOfShape edgeMap;
   TopExp::MapShapes(shape, TopAbs_EDGE, edgeMap);
+  // Seams (where a sphere or cylinder face closes on itself) are not real
+  // edges: they keep their index but get no line.
+  TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+  TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+  auto isSeam = [&](const TopoDS_Edge& e) {
+    const int at = edgeFaces.FindIndex(e);
+    if (!at) return false;
+    const TopTools_ListOfShape& faces = edgeFaces.FindFromIndex(at);
+    if (faces.IsEmpty()) return false;
+    for (TopTools_ListIteratorOfListOfShape it(faces); it.More(); it.Next())
+      if (!BRep_Tool::IsClosed(e, TopoDS::Face(it.Value()))) return false;
+    return true;
+  };
   for (int i = 1; i <= edgeMap.Extent(); i++) {
     const TopoDS_Edge& edge = TopoDS::Edge(edgeMap.FindKey(i));
     out.edgeRanges.push_back(static_cast<uint32_t>(out.edges.size() / 6));
@@ -212,7 +227,7 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
       size_t before;
       ~Count() { o.edgeRanges.back() = static_cast<uint32_t>((o.edges.size() - before) / 6); }
     } count{out, before};
-    if (BRep_Tool::Degenerated(edge)) continue;
+    if (BRep_Tool::Degenerated(edge) || isSeam(edge)) continue;
     try {
       BRepAdaptor_Curve curve(edge);
       GCPnts_TangentialDeflection pts(curve, angle, defl, 2, 1e-9, 1e-7);
