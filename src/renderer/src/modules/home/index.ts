@@ -89,6 +89,7 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
   if (replace && single?.kind === 'project') {
     doc.reset()
     for (const r of single.project.roots) doc.addRestored(r.object, r.meta)
+    doc.setDims(single.project.dims)
     doc.name = single.f.name
     doc.filePath = single.f.path ?? null
     doc.history.markSaved()
@@ -99,6 +100,7 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
       for (const l of loaded) {
         if (l.kind === 'project') {
           for (const r of l.project.roots) doc.addRestoredUndoable(r.object, r.meta)
+          for (const { id: _id, ...d } of l.project.dims) doc.addDim(d)
           continue
         }
         const base = l.f.name.replace(/\.[^.]+$/, '')

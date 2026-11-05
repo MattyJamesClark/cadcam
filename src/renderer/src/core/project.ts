@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CadDocument, DocNode } from './document'
+import type { CadDocument, Dimension, DocNode } from './document'
 
 /**
  * CADCAM Studio project files (.ccs): the whole design in one file, so it opens
@@ -209,7 +209,7 @@ export function saveProject(doc: CadDocument, appVersion?: string): Uint8Array {
     tagged.forEach((o) => delete o.userData.__node)
   }
 
-  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson }
+  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson, dims: doc.dims }
   const text = new TextEncoder().encode(JSON.stringify(json))
   const jsonLen = text.byteLength + ((4 - (text.byteLength % 4)) % 4)
   const out = new Uint8Array(8 + jsonLen + size)
@@ -232,7 +232,7 @@ export function isProject(data: ArrayBuffer): boolean {
 }
 
 /** Read a project into objects ready for CadDocument.addRestored. */
-export function readProject(data: ArrayBuffer): { name: string; roots: { object: THREE.Object3D; meta: RootJson['meta'] }[] } {
+export function readProject(data: ArrayBuffer): { name: string; roots: { object: THREE.Object3D; meta: RootJson['meta'] }[]; dims: Dimension[] } {
   if (!isProject(data)) throw new Error('Not a CADCAM Studio project file')
   const jsonLen = new DataView(data).getUint32(4, true)
   const json = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 8, jsonLen))) as ProjectJson & {
@@ -299,5 +299,9 @@ export function readProject(data: ArrayBuffer): { name: string; roots: { object:
     return o
   }
 
-  return { name: json.name, roots: json.roots.map((r) => ({ object: build(r.obj), meta: r.meta })) }
+  return {
+    name: json.name,
+    roots: json.roots.map((r) => ({ object: build(r.obj), meta: r.meta })),
+    dims: ((json as { dims?: Dimension[] }).dims ?? []) as Dimension[]
+  }
 }

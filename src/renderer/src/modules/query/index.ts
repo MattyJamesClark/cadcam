@@ -3,6 +3,8 @@ import { icons } from '@/core/icons'
 import { selectFilter, type SelectFilter } from '@/core/picking'
 import { closeMeasure, isMeasuring, openMeasure } from '@/core/measure'
 import { hoverInfoEnabled, setHoverInfo, startHoverInfo } from '@/core/hoverinfo'
+import { closeDimensionTool, dimToolKind, openDimensionTool, type DimKind } from '@/core/dimtool'
+import { dimsShown, setDimsShown, startDimensions } from '@/core/dimensions'
 import { closeBoundingBox, isBoundingBoxOpen, openBoundingBox } from '@/core/bbox'
 
 /**
@@ -10,6 +12,17 @@ import { closeBoundingBox, isBoundingBoxOpen, openBoundingBox } from '@/core/bbo
  * select filter that decides what a click picks (points, edges, faces, bodies;
  * sketch entities later).
  */
+
+const dimCommand = (kind: DimKind, label: string, icon: string, tooltip: string, shortcut?: string): Command => ({
+  id: `query.dim.${kind}`,
+  label,
+  icon,
+  shortcut,
+  tooltip,
+  isEnabled: (ctx) => !ctx.doc.isEmpty(),
+  isActive: () => dimToolKind() === kind,
+  run: (ctx) => (dimToolKind() === kind ? closeDimensionTool() : openDimensionTool(ctx, kind))
+})
 
 const filterCommand = (key: keyof SelectFilter, label: string, icon: string): Command => ({
   id: `query.select.${key}`,
@@ -27,7 +40,10 @@ export const queryModule: CadModule = {
   id: 'query',
   title: 'Query',
   order: 5,
-  init: (ctx) => startHoverInfo(ctx),
+  init: (ctx) => {
+    startHoverInfo(ctx)
+    startDimensions(ctx)
+  },
   groups: [
     {
       label: 'Measure',
@@ -51,6 +67,26 @@ export const queryModule: CadModule = {
           isEnabled: (ctx) => !ctx.doc.isEmpty(),
           isActive: () => isBoundingBoxOpen(),
           run: (ctx) => (isBoundingBoxOpen() ? closeBoundingBox() : openBoundingBox(ctx))
+        }
+      ]
+    },
+    {
+      label: 'Dimensions',
+      commands: [
+        dimCommand('distance', 'Point to point', icons.dimLinear, 'Distance between two points, edges, faces or hole centres: true, or along X / Y / Z', 'D'),
+        dimCommand('size', 'Diameter / radius', icons.dimDia, 'Ø or R of a hole, boss, arc or fillet'),
+        dimCommand('angle', 'Angle', icons.dimAngle, 'Angle between two straight edges or flat faces'),
+        dimCommand('ordinate', 'Ordinate', icons.dimOrd, 'X / Y / Z of a point or hole centre from a datum'),
+        {
+          id: 'query.dim.show',
+          label: 'Show dimensions',
+          icon: icons.eye,
+          tooltip: 'Show or hide the dimensions in the view',
+          isActive: () => dimsShown(),
+          run: (ctx) => {
+            setDimsShown(!dimsShown())
+            ctx.refreshRibbon()
+          }
         }
       ]
     },

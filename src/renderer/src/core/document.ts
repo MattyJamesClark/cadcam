@@ -39,6 +39,33 @@ export interface Measure {
 type DocEvents = {
   changed: void
   selection: string[]
+  /** Dimensions were added, removed or moved. */
+  dims: void
+}
+
+type V3 = [number, number, number]
+
+/**
+ * A dimension shown on the model. Values are measured when it's made (they
+ * don't follow later edits). Points are in world space.
+ */
+export interface Dimension {
+  id: string
+  type: 'distance' | 'diameter' | 'radius' | 'angle' | 'ordinate'
+  /** distance: which component is shown (true length or along a datum axis). */
+  axis?: 'true' | 'x' | 'y' | 'z'
+  /** Anchor points. distance: the two ends; diameter/radius: centre, rim point; angle: apex, arm 1 end, arm 2 end; ordinate: the point. */
+  points: V3[]
+  /** Circle normal (diameter / radius), for drawing across the circle. */
+  normal?: V3
+  /** Datum the axis / ordinate values are relative to. */
+  datumId?: string
+  value: number
+  text: string
+  /** Where the label sits (world). */
+  label: V3
+  /** Bodies it was taken from (hidden with them). */
+  nodeIds: string[]
 }
 
 let nextId = 1
@@ -71,6 +98,8 @@ export class CadDocument extends Emitter<DocEvents> {
   readonly roots: DocNode[] = []
   private nodes = new Map<string, DocNode>()
   private selected = new Set<string>()
+  /** Dimensions on the model, in creation order. */
+  dims: Dimension[] = []
   name = 'Untitled'
   /** Where the project was last saved / opened from (.ccs), if anywhere. */
   filePath: string | null = null
@@ -388,12 +417,62 @@ export class CadDocument extends Emitter<DocEvents> {
     for (let i = 2; ; i++) if (!taken.has(`${stem} (${i})`)) return `${stem} (${i})`
   }
 
+  // ---- dimensions --------------------------------------------------------
+
+  addDim(d: Omit<Dimension, 'id'>): Dimension {
+    const dim: Dimension = { ...d, id: newId() }
+    const add = (): void => {
+      this.dims.push(dim)
+      this.emit('dims', undefined)
+    }
+    const remove = (): void => {
+      this.dims = this.dims.filter((x) => x !== dim)
+      this.emit('dims', undefined)
+    }
+    add()
+    this.history.record({ label: `Add ${dim.type} dimension`, undo: remove, redo: add })
+    return dim
+  }
+
+  removeDims(ids: string[]): void {
+    const gone = this.dims.map((d, i) => ({ d, i })).filter(({ d }) => ids.includes(d.id))
+    if (!gone.length) return
+    const remove = (): void => {
+      this.dims = this.dims.filter((d) => !ids.includes(d.id))
+      this.emit('dims', undefined)
+    }
+    const restore = (): void => {
+      for (const { d, i } of gone) this.dims.splice(Math.min(i, this.dims.length), 0, d)
+      this.emit('dims', undefined)
+    }
+    remove()
+    this.history.record({ label: gone.length === 1 ? 'Delete dimension' : `Delete ${gone.length} dimensions`, undo: restore, redo: remove })
+  }
+
+  moveDimLabel(id: string, from: V3, to: V3): void {
+    const d = this.dims.find((x) => x.id === id)
+    if (!d) return
+    const set = (p: V3): void => {
+      d.label = [...p]
+      this.emit('dims', undefined)
+    }
+    set(to)
+    this.history.record({ label: 'Move dimension', undo: () => set(from), redo: () => set(to) })
+  }
+
+  /** Replace all dimensions without history (opening a project). */
+  setDims(dims: Dimension[]): void {
+    this.dims = dims.map((d) => ({ ...d, id: newId() }))
+    this.emit('dims', undefined)
+  }
+
   /** Empty the document (undoable). */
   clear(): void {
     const name = this.name
     const path = this.filePath
     this.history.batch('New', () => {
       for (const n of [...this.roots]) this.removeNode(n)
+      this.removeDims(this.dims.map((d) => d.id))
       this.history.record({
         label: 'New',
         undo: () => {
@@ -419,6 +498,8 @@ export class CadDocument extends Emitter<DocEvents> {
       disposeObject(n.object)
     }
     this.selected.clear()
+    this.dims = []
+    this.emit('dims', undefined)
     this.history.reset()
     this.name = 'Untitled'
     this.filePath = null
