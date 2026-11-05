@@ -31,15 +31,15 @@ export const viewModule: CadModule = {
       ]
     },
     {
-      label: 'Standard views',
+      label: 'Standard views (SolidWorks shortcuts)',
       commands: [
-        view('iso', 'Iso', icons.iso, '0'),
-        view('top', 'Top', icons.top, '7'),
-        view('front', 'Front', icons.front, '1'),
-        view('right', 'Right', icons.right, '3'),
+        view('iso', 'Iso', icons.iso, 'Ctrl+7'),
+        view('top', 'Top', icons.top, 'Ctrl+5'),
+        view('front', 'Front', icons.front, 'Ctrl+1'),
+        view('right', 'Right', icons.right, 'Ctrl+4'),
         view('left', 'Left', icons.left, 'Ctrl+3'),
-        view('back', 'Back', icons.back, 'Ctrl+1'),
-        view('bottom', 'Bottom', icons.bottom, 'Ctrl+7')
+        view('back', 'Back', icons.back, 'Ctrl+2'),
+        view('bottom', 'Bottom', icons.bottom, 'Ctrl+6')
       ]
     },
     {
@@ -49,7 +49,6 @@ export const viewModule: CadModule = {
           id: 'view.perspective',
           label: 'Perspective',
           icon: icons.persp,
-          shortcut: '5',
           isActive: (ctx) => ctx.viewport.projection === 'perspective',
           run: (ctx) => ctx.viewport.setProjection('perspective')
         },
@@ -57,7 +56,6 @@ export const viewModule: CadModule = {
           id: 'view.orthographic',
           label: 'Orthographic',
           icon: icons.ortho,
-          shortcut: 'Shift+5',
           isActive: (ctx) => ctx.viewport.projection === 'orthographic',
           run: (ctx) => ctx.viewport.setProjection('orthographic')
         }
@@ -99,6 +97,14 @@ export const viewModule: CadModule = {
           shortcut: 'G',
           isActive: (ctx) => ctx.viewport.grid.visible,
           run: (ctx) => ctx.viewport.setGridVisible(!ctx.viewport.grid.visible)
+        },
+        {
+          id: 'view.planes',
+          label: 'Planes',
+          icon: icons.planes,
+          tooltip: 'Show the Top, Front and Right origin planes',
+          isActive: (ctx) => ctx.viewport.planes.visible,
+          run: (ctx) => ctx.viewport.setPlanesVisible(!ctx.viewport.planes.visible)
         },
         {
           id: 'view.axes',

@@ -2,6 +2,7 @@ import { CadDocument } from './document'
 import { icons } from './icons'
 import type { CadModule, Command, ModuleContext, StatusKind } from './types'
 import { Viewport } from './viewport'
+import { openSettings } from './settingsDialog'
 import type { UpdateStatus } from '../../../shared/ipc'
 
 const TAB_KEY = 'cadcam.activeTab'
@@ -45,7 +46,10 @@ export class Shell {
     const docName = h('div', 'doc-name')
     const update = h('button', 'update-pill')
     update.hidden = true
-    title.append(docName, update)
+    const gear = h('button', 'icon-btn', icons.gear)
+    gear.title = 'Settings (Ctrl+,)'
+    gear.addEventListener('click', () => openSettings())
+    title.append(docName, update, gear)
 
     const tabs = h('nav', 'tabs')
     tabs.setAttribute('role', 'tablist')
@@ -165,6 +169,12 @@ export class Shell {
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement
       if (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
+      if (document.querySelector('.modal-backdrop')) return
+      if (e.ctrlKey && e.key === ',') {
+        e.preventDefault()
+        openSettings()
+        return
+      }
       const combo = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', normKey(e.key)]
         .filter(Boolean)
         .join('+')

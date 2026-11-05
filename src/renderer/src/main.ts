@@ -2,10 +2,12 @@ import './styles.css'
 import { registerBuiltinFormats } from './core/formats'
 import { extOf, importerFor } from './core/io'
 import { Shell } from './core/shell'
+import { initTheme } from './core/settingsDialog'
 import { modules } from './modules'
 import { importFiles } from './modules/home'
 
 registerBuiltinFormats()
+initTheme()
 
 const shell = new Shell(document.getElementById('app')!, modules)
 

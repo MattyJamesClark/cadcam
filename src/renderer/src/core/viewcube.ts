@@ -50,6 +50,10 @@ export class ViewCube {
     })
   }
 
+  setVisible(v: boolean): void {
+    this.renderer.domElement.style.display = v ? '' : 'none'
+  }
+
   render(main: THREE.Camera): void {
     this.lastQuat.copy(main.quaternion)
     this.draw()

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { settings } from './settings'
 
 /**
  * File format registry. Each format is a small adapter; adding STEP, IGES,
@@ -42,10 +43,16 @@ export function importerFor(fileName: string): Importer | undefined {
   return importers.find((i) => i.extensions.includes(ext))
 }
 
-export const PART_MATERIAL_COLOR = 0x9aa7b4
-
-export function partMaterial(color = PART_MATERIAL_COLOR): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide })
+/** Standard part material. Without an explicit colour it follows the "Part colour" setting. */
+export function partMaterial(color?: THREE.ColorRepresentation): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({
+    color: color ?? settings.get().partColor,
+    metalness: 0.15,
+    roughness: 0.55,
+    side: THREE.DoubleSide
+  })
+  if (color === undefined) m.userData.defaultColor = true
+  return m
 }
 
 /**

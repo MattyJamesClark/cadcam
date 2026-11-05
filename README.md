@@ -17,18 +17,24 @@ The installer isn't code-signed yet, so Windows SmartScreen may warn on the very
 
 ## Using the viewport
 
+Navigation is SolidWorks-style by default (change it in Settings, the gear icon or Ctrl+,).
+
 | Action | Mouse / key |
 | --- | --- |
-| Rotate | Right-drag |
-| Pan | Middle-drag, or Shift + right-drag |
-| Zoom (to cursor) | Wheel |
+| Rotate | Middle-drag (about the point under the cursor) |
+| Pan | Ctrl + middle-drag |
+| Zoom | Wheel (zooms at the cursor), or Shift + middle-drag |
+| Roll | Alt + middle-drag |
+| Zoom to fit | Double-click middle, or F |
+| Rotate 15° / 90° | Arrow keys / Shift + arrows (Alt + left/right rolls, Ctrl + arrows pans) |
+| Standard views | Ctrl+1 Front, Ctrl+2 Back, Ctrl+3 Left, Ctrl+4 Right, Ctrl+5 Top, Ctrl+6 Bottom, Ctrl+7 Iso |
 | Select / multi-select | Left-click / Ctrl+click |
-| Snap to a view | Click a face of the view cube |
-| Fit all / fit selected | F / Shift+F |
-| Iso, Top, Front, Right | 0, 7, 1, 3 (Ctrl for the opposite side) |
-| Perspective / orthographic | 5 / Shift+5 |
+| Snap to a view | Click a face of the view cube, or an axis letter on the XYZ triad (Shift+click for the opposite side) |
 | Grid on/off | G |
 | New / Open / Import-merge | Ctrl+N / Ctrl+O / Ctrl+I |
+
+Settings also cover light/dark/system mode, accent colour, viewport background, part colour,
+wheel direction, and showing/hiding the view cube and triad. They're saved on this computer.
 
 Drag files onto the window to merge them into the current design.
 

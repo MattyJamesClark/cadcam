@@ -1,7 +1,9 @@
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CadDocument } from './document'
 import { Emitter } from './events'
+import { CadNavigation } from './navigation'
+import { effectiveTheme, settings, type Settings } from './settings'
+import { AxisTriad } from './triad'
 import { ViewCube } from './viewcube'
 
 export type Projection = 'perspective' | 'orthographic'
@@ -30,23 +32,22 @@ const SELECT_COLOR = new THREE.Color('#ff9f1c')
 
 /**
  * The 3D viewport. Z-up, millimetre units, renders on demand only (no
- * continuous loop) so the app sits at ~0% GPU when idle.
- *
- * Mouse: left = select, right drag = rotate, middle drag = pan,
- * wheel = zoom to cursor. Shift+right = pan as well.
+ * continuous loop) so the app sits at ~0% GPU when idle. Mouse handling lives
+ * in CadNavigation; left-click selection lives here.
  */
 export class Viewport extends Emitter<ViewportEvents> {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
   readonly persp: THREE.PerspectiveCamera
   readonly ortho: THREE.OrthographicCamera
-  readonly controls: OrbitControls
+  readonly nav: CadNavigation
   readonly grid: THREE.Group
   readonly axes: THREE.Group
+  readonly planes: THREE.Group
   private viewCube: ViewCube
+  private triad: AxisTriad
   private headLight = new THREE.DirectionalLight(0xffffff, 1.6)
   private frameRequested = false
-  private animation: { from: CamState; to: CamState; t0: number; ms: number } | null = null
   private raycaster = new THREE.Raycaster()
   private ndc = new THREE.Vector2()
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
@@ -68,19 +69,14 @@ export class Viewport extends Emitter<ViewportEvents> {
 
     this.persp = new THREE.PerspectiveCamera(40, 1, 0.1, 1e6)
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -1e6, 1e6)
-    for (const cam of [this.persp, this.ortho]) cam.up.set(0, 0, 1)
-    this.persp.position.set(300, -400, 280)
 
-    this.controls = new OrbitControls(this.persp, this.renderer.domElement)
-    this.controls.enableDamping = false
-    this.controls.zoomToCursor = true
-    this.controls.screenSpacePanning = true
-    this.controls.mouseButtons = {
-      LEFT: null as unknown as THREE.MOUSE,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.ROTATE
-    }
-    this.controls.addEventListener('change', () => this.onCameraChange())
+    this.nav = new CadNavigation({
+      dom: this.renderer.domElement,
+      camera: () => this.camera,
+      pick: (ndc) => this.pickPoint(ndc),
+      fitAll: () => this.fitAll(),
+      changed: () => this.requestRender()
+    })
 
     // Lighting: soft ambient sky/ground + a light that follows the camera.
     this.scene.add(new THREE.HemisphereLight(0xdde6f0, 0x3a3f47, 1.1))
@@ -89,12 +85,16 @@ export class Viewport extends Emitter<ViewportEvents> {
 
     this.grid = makeGrid()
     this.axes = makeAxes(60)
-    this.scene.add(this.grid, this.axes, doc.root)
+    this.planes = makeOriginPlanes()
+    this.planes.visible = false
+    this.scene.add(this.grid, this.planes, this.axes, doc.root)
 
     this.viewCube = new ViewCube(host, (dir) => this.lookFrom(dir))
+    this.triad = new AxisTriad(host, (dir) => this.lookFrom(dir))
 
     doc.on('changed', () => {
       this.applyDisplayMode()
+      this.updatePlaneSize()
       this.requestRender()
     })
     doc.on('selection', () => {
@@ -105,8 +105,12 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.bindPointer()
     new ResizeObserver(() => this.resize()).observe(host)
     this.resize()
-    this.lookFrom(VIEW_DIRS.iso, false)
+    this.nav.goTo(this.nav.poseLookingFrom(VIEW_DIRS.iso), false)
     this.fitAll(false)
+
+    settings.on('changed', (s) => this.applySettings(s))
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => this.applySettings(settings.get()))
+    this.applySettings(settings.get())
   }
 
   get camera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
@@ -123,20 +127,17 @@ export class Viewport extends Emitter<ViewportEvents> {
 
   private frame(time: number): void {
     this.frameRequested = false
-    if (this.animation) {
-      const a = this.animation
-      const k = Math.min(1, (time - a.t0) / a.ms)
-      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2
-      applyCamState(this, lerpCamState(a.from, a.to, e))
-      if (k >= 1) this.animation = null
-      else this.requestRender()
-    }
+    if (this.nav.tick(time)) this.requestRender()
     const cam = this.camera
+    this.nav.applyTo(cam)
+    this.updateClipping()
+    const target = this.nav.pose.target
     this.headLight.position.copy(cam.position)
-    this.headLight.target.position.copy(this.controls.target)
-    this.grid.userData.update(cam, this.controls.target)
+    this.headLight.target.position.copy(target)
+    this.grid.userData.update(cam, target, this.nav.pose.dist)
     this.renderer.render(this.scene, cam)
     this.viewCube.render(cam)
+    this.triad.render(cam)
   }
 
   private resize(): void {
@@ -145,25 +146,17 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.renderer.setSize(w, h, false)
     this.persp.aspect = w / h
     this.persp.updateProjectionMatrix()
-    this.updateOrthoFrustum()
     this.requestRender()
   }
 
-  private onCameraChange(): void {
-    // Keep depth precision tight around whatever we're looking at.
-    const dist = this.camera.position.distanceTo(this.controls.target)
+  /** Keep depth precision tight around what we're looking at; size the ortho frustum from distance. */
+  private updateClipping(): void {
+    const dist = this.nav.pose.dist
     this.persp.near = Math.max(0.01, dist / 500)
     this.persp.far = dist * 500
     this.persp.updateProjectionMatrix()
-    this.updateOrthoFrustum()
-    this.requestRender()
-  }
-
-  /** Ortho frustum is sized from distance to target, so zooming feels like perspective. */
-  private updateOrthoFrustum(): void {
-    const dist = this.camera.position.distanceTo(this.controls.target)
     const h = 2 * dist * Math.tan(THREE.MathUtils.degToRad(this.persp.fov / 2))
-    const aspect = this.host.clientWidth / Math.max(1, this.host.clientHeight)
+    const aspect = this.persp.aspect
     this.ortho.left = (-h * aspect) / 2
     this.ortho.right = (h * aspect) / 2
     this.ortho.top = h / 2
@@ -174,18 +167,34 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.ortho.updateProjectionMatrix()
   }
 
+  // ---- settings & theme --------------------------------------------------
+
+  private applySettings(s: Settings): void {
+    const dark = effectiveTheme(s) === 'dark'
+    const top = s.viewportTop ?? (dark ? '#3b4350' : '#e8edf3')
+    const bottom = s.viewportBottom ?? (dark ? '#1c2026' : '#c3ccd6')
+    this.host.style.setProperty('--vp-top', top)
+    this.host.style.setProperty('--vp-bottom', bottom)
+    // Grid contrasts with the background, not with the UI theme.
+    const lum = (new THREE.Color(top).getHSL({ h: 0, s: 0, l: 0 }).l + new THREE.Color(bottom).getHSL({ h: 0, s: 0, l: 0 }).l) / 2
+    this.grid.userData.setColor(lum > 0.55 ? 0x3d4651 : 0xaab4c0, lum > 0.55 ? 0.8 : 1)
+    SELECT_COLOR.set(s.accent)
+    this.viewCube.setVisible(s.showViewCube)
+    this.triad.setVisible(s.showTriad)
+    const part = new THREE.Color(s.partColor)
+    this.doc.root.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
+      if (m && !Array.isArray(m) && m.userData?.defaultColor) m.color.copy(part)
+    })
+    this.applySelection()
+    this.requestRender()
+  }
+
   // ---- view commands -----------------------------------------------------
 
   setProjection(p: Projection): void {
     if (p === this.projection) return
-    const from = this.camera
-    const to = p === 'perspective' ? this.persp : this.ortho
-    to.position.copy(from.position)
-    to.quaternion.copy(from.quaternion)
     this.projection = p
-    this.controls.object = to
-    this.updateOrthoFrustum()
-    this.controls.update()
     this.emit('settings', undefined)
     this.requestRender()
   }
@@ -209,15 +218,16 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.requestRender()
   }
 
+  setPlanesVisible(v: boolean): void {
+    this.planes.visible = v
+    this.updatePlaneSize()
+    this.emit('settings', undefined)
+    this.requestRender()
+  }
+
   /** Orient the camera to look at the current target from `dir`. */
   lookFrom(dir: THREE.Vector3, animate = true): void {
-    const target = this.controls.target.clone()
-    const dist = this.camera.position.distanceTo(target) || 500
-    const d = dir.clone().normalize()
-    // Z stays up at all times. Straight-down/up views get a tiny tilt toward
-    // -Y so X reads left-to-right and Y points up the screen.
-    if (Math.abs(d.z) > 0.9999) d.set(0, -1e-4, Math.sign(d.z)).normalize()
-    this.animateTo({ position: target.clone().addScaledVector(d, dist), target }, animate)
+    this.nav.goTo(this.nav.poseLookingFrom(dir), animate)
   }
 
   setStandardView(v: StandardView): void {
@@ -243,30 +253,14 @@ export class Viewport extends Emitter<ViewportEvents> {
 
   private fitBox(box: THREE.Box3, animate: boolean): void {
     const sphere = box.getBoundingSphere(new THREE.Sphere())
-    const dir = this.camera.position.clone().sub(this.controls.target).normalize()
     const fov = THREE.MathUtils.degToRad(this.persp.fov)
     const aspect = this.persp.aspect
     const fitH = sphere.radius / Math.sin(fov / 2)
     const fitW = sphere.radius / Math.sin(Math.atan(Math.tan(fov / 2) * aspect))
-    const dist = Math.max(fitH, fitW) * 1.1
-    this.animateTo(
-      {
-        position: sphere.center.clone().addScaledVector(dir, dist),
-        target: sphere.center.clone()
-      },
+    this.nav.goTo(
+      { target: sphere.center.clone(), quat: this.nav.pose.quat.clone(), dist: Math.max(fitH, fitW) * 1.1 },
       animate
     )
-  }
-
-  private animateTo(to: CamState, animate: boolean): void {
-    const from = readCamState(this)
-    if (!animate) {
-      applyCamState(this, to)
-      this.requestRender()
-      return
-    }
-    this.animation = { from, to, t0: performance.now(), ms: 350 }
-    this.requestRender()
   }
 
   // ---- display & selection ----------------------------------------------
@@ -313,21 +307,35 @@ export class Viewport extends Emitter<ViewportEvents> {
     })
   }
 
-  // ---- pointer -----------------------------------------------------------
+  private updatePlaneSize(): void {
+    if (!this.planes.visible) return
+    const box = this.doc.bounds()
+    const size = box.isEmpty() ? 100 : Math.max(50, box.getSize(new THREE.Vector3()).length() * 0.6)
+    this.planes.scale.setScalar(size)
+  }
+
+  // ---- picking -----------------------------------------------------------
+
+  /** First visible model point under the given NDC position. */
+  pickPoint(ndc: THREE.Vector2): THREE.Vector3 | null {
+    return this.pickHit(ndc)?.point ?? null
+  }
+
+  private pickHit(ndc: THREE.Vector2): THREE.Intersection | undefined {
+    this.nav.applyTo(this.camera)
+    this.raycaster.setFromCamera(ndc, this.camera)
+    return this.raycaster
+      .intersectObject(this.doc.root, true)
+      .find((h) => isVisible(h.object) && h.object.name !== EDGE_TAG)
+  }
 
   private bindPointer(): void {
     const el = this.renderer.domElement
     el.addEventListener('contextmenu', (e) => e.preventDefault())
 
-    // Shift + right drag pans (common in CAD packages).
-    el.addEventListener(
-      'pointerdown',
-      (e) => {
-        this.controls.mouseButtons.RIGHT = e.shiftKey ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
-        if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY }
-      },
-      { capture: true }
-    )
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY }
+    })
 
     el.addEventListener('pointerup', (e) => {
       if (e.button !== 0 || !this.downAt) return
@@ -335,16 +343,14 @@ export class Viewport extends Emitter<ViewportEvents> {
       this.downAt = null
       if (moved > 4) return
       this.setNdc(e)
-      this.raycaster.setFromCamera(this.ndc, this.camera)
-      const hit = this.raycaster
-        .intersectObject(this.doc.root, true)
-        .find((h) => h.object.visible && h.object.name !== EDGE_TAG)
+      const hit = this.pickHit(this.ndc)
       const id = (hit?.object.userData.docId as string | undefined) ?? null
       this.emit('pick', { id, additive: e.ctrlKey || e.shiftKey })
     })
 
     el.addEventListener('pointermove', (e) => {
       this.setNdc(e)
+      this.nav.applyTo(this.camera)
       this.raycaster.setFromCamera(this.ndc, this.camera)
       const p = new THREE.Vector3()
       this.emit('cursor', this.raycaster.ray.intersectPlane(this.groundPlane, p) ? p : null)
@@ -358,34 +364,9 @@ export class Viewport extends Emitter<ViewportEvents> {
   }
 }
 
-// ---- camera state helpers -------------------------------------------------
-
-interface CamState {
-  position: THREE.Vector3
-  target: THREE.Vector3
-}
-
-function readCamState(v: Viewport): CamState {
-  return { position: v.camera.position.clone(), target: v.controls.target.clone() }
-}
-
-function applyCamState(v: Viewport, s: CamState): void {
-  for (const cam of [v.persp, v.ortho]) cam.position.copy(s.position)
-  v.controls.target.copy(s.target)
-  v.camera.lookAt(s.target)
-  v.controls.update()
-}
-
-function lerpCamState(a: CamState, b: CamState, t: number): CamState {
-  // Interpolate the direction on a sphere so rotations don't cut through the target.
-  const target = a.target.clone().lerp(b.target, t)
-  const da = a.position.clone().sub(a.target)
-  const db = b.position.clone().sub(b.target)
-  const dist = THREE.MathUtils.lerp(da.length(), db.length(), t)
-  const qa = new THREE.Quaternion()
-  const qb = new THREE.Quaternion().setFromUnitVectors(da.clone().normalize(), db.clone().normalize())
-  const dir = da.normalize().applyQuaternion(qa.slerp(qb, t))
-  return { position: target.clone().addScaledVector(dir, dist), target }
+function isVisible(o: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false
+  return true
 }
 
 // ---- scene furniture ------------------------------------------------------
@@ -406,7 +387,8 @@ function makeGrid(): THREE.Group {
       uMinor: { value: 10 },
       uFade: { value: 2000 },
       uCam: { value: new THREE.Vector3() },
-      uColor: { value: new THREE.Color(0xaab4c0) }
+      uColor: { value: new THREE.Color(0xaab4c0) },
+      uStrength: { value: 1 }
     },
     vertexShader: /* glsl */ `
       varying vec3 vPos;
@@ -418,6 +400,7 @@ function makeGrid(): THREE.Group {
     fragmentShader: /* glsl */ `
       uniform float uMinor;
       uniform float uFade;
+      uniform float uStrength;
       uniform vec3 uCam;
       uniform vec3 uColor;
       varying vec3 vPos;
@@ -428,7 +411,7 @@ function makeGrid(): THREE.Group {
         return 1.0 - min(min(g.x, g.y), 1.0);
       }
       void main() {
-        float a = max(line(vPos.xy, uMinor) * 0.18, line(vPos.xy, uMinor * 10.0) * 0.42);
+        float a = max(line(vPos.xy, uMinor) * 0.18, line(vPos.xy, uMinor * 10.0) * 0.42) * uStrength;
         float d = length(vPos - uCam);
         a *= 1.0 - smoothstep(uFade * 0.35, uFade, d);
         if (a < 0.004) discard;
@@ -439,8 +422,7 @@ function makeGrid(): THREE.Group {
   plane.renderOrder = -1
   plane.raycast = () => {}
   g.add(plane)
-  g.userData.update = (cam: THREE.Camera, target: THREE.Vector3): void => {
-    const dist = cam.position.distanceTo(target)
+  g.userData.update = (cam: THREE.Camera, target: THREE.Vector3, dist: number): void => {
     // 1, 10, 100 mm ... spacing chosen so cells stay a comfortable size on screen.
     const minor = Math.pow(10, Math.max(-1, Math.floor(Math.log10(dist / 15))))
     const fade = Math.max(dist * 6, minor * 200)
@@ -449,6 +431,10 @@ function makeGrid(): THREE.Group {
     mat.uniforms.uCam.value.copy(cam.position)
     plane.scale.set(fade * 2.2, fade * 2.2, 1)
     plane.position.set(target.x, target.y, 0)
+  }
+  g.userData.setColor = (color: number, strength: number): void => {
+    mat.uniforms.uColor.value.set(color)
+    mat.uniforms.uStrength.value = strength
   }
   return g
 }
@@ -463,8 +449,36 @@ function makeAxes(len: number): THREE.Group {
   ]
   for (const [dir, color] of axes) {
     const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), dir.clone().multiplyScalar(len)])
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color }))
-    g.add(line)
+    g.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color })))
+  }
+  return g
+}
+
+/** The three origin datum planes (Top = XY, Front = XZ, Right = YZ), unit size, scaled to the model. */
+function makeOriginPlanes(): THREE.Group {
+  const g = new THREE.Group()
+  g.name = 'planes'
+  const defs: [string, THREE.Euler, number][] = [
+    ['Top (XY)', new THREE.Euler(0, 0, 0), 0x3e8ef7],
+    ['Front (XZ)', new THREE.Euler(Math.PI / 2, 0, 0), 0x46a758],
+    ['Right (YZ)', new THREE.Euler(0, Math.PI / 2, 0), 0xe5484d]
+  ]
+  for (const [name, rot, color] of defs) {
+    const geo = new THREE.PlaneGeometry(1, 1)
+    const fill = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false })
+    )
+    const border = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 })
+    )
+    const p = new THREE.Group()
+    p.name = name
+    p.rotation.copy(rot)
+    p.add(fill, border)
+    fill.raycast = () => {}
+    g.add(p)
   }
   return g
 }
