@@ -9,6 +9,9 @@ on:
     paths: ['kernel/**', '.github/workflows/kernel.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   OCCT_TAG: V7_9_3
   EMSDK_VERSION: 4.0.20
@@ -74,7 +77,16 @@ jobs:
           else link -sWASM_LEGACY_EXCEPTIONS=0 && echo "EH: exnref" > out/BUILD.txt; fi
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
           ls -la out
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cadkernel
-          path: out/
+      # Commit the built kernel next to its worker on this branch, so it can be
+      # tested and then merged into main with the app changes that use it.
+      - name: Commit kernel
+        run: |
+          dest=src/renderer/public/vendor/cadkernel
+          mkdir -p $dest
+          cp out/cadkernel.js out/cadkernel.wasm out/BUILD.txt $dest/
+          cp out/LICENSE* $dest/ 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $dest
+          git commit -m "Built CAD kernel ($(cat out/BUILD.txt))" || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
