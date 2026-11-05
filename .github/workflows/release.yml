@@ -45,11 +45,21 @@ jobs:
       # Version = major.minor from package.json + the build number, so every
       # push gets a higher version and the updater picks it up.
       - name: Set version
+        id: version
         shell: bash
         run: |
           base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
-          npm version "$base.${{ github.run_number }}" --no-git-tag-version
-      - name: Build and publish
+          v="$base.${{ github.run_number }}"
+          npm version "$v" --no-git-tag-version
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      # Upload the installer to a draft release first, then publish it, so the
+      # updater never sees a release without its files.
+      - name: Build and upload
         run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish release
+        shell: bash
+        run: gh release edit "v${{ steps.version.outputs.version }}" --draft=false --latest --target "$GITHUB_SHA"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
