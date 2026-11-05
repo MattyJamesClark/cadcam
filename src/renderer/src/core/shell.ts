@@ -154,6 +154,15 @@ export class Shell {
     this.bindDocument()
     this.bindUpdates()
     for (const m of this.modules) m.init?.(this.ctx)
+    let fitQueued = false
+    new ResizeObserver(() => {
+      if (fitQueued) return
+      fitQueued = true
+      requestAnimationFrame(() => {
+        fitQueued = false
+        this.fitRibbon()
+      })
+    }).observe(this.els.ribbon)
 
     const saved = safeGet(TAB_KEY)
     this.activate(this.modules.find((m) => m.id === saved) ?? this.modules[0])
@@ -477,10 +486,81 @@ export class Shell {
         this.buttons.set(c.id, b)
         row.append(b)
       }
-      group.append(row, h('div', 'ribbon-label', g.label))
+      // Shown instead of the row when the window is too narrow for the group.
+      const drop = h('button', 'cmd group-drop')
+      drop.innerHTML = `${g.commands[0]?.icon ?? ''}<span>${g.label.replace(/\s*\(.*\)/, '')} ▾</span>`
+      drop.title = g.commands.map((c) => c.label).join(', ')
+      drop.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.openGroupMenu(drop, g.commands)
+      })
+      group.append(row, drop, h('div', 'ribbon-label', g.label))
       r.append(group)
     }
     this.refreshRibbon()
+    this.fitRibbon()
+  }
+
+  /**
+   * Make the ribbon fit the window instead of scrolling: first tighter
+   * buttons, then long groups fold into drop-down buttons, then icons only,
+   * then the other groups fold too (rightmost first).
+   */
+  private fitRibbon(): void {
+    const r = this.els.ribbon
+    const groups = [...r.querySelectorAll<HTMLElement>('.ribbon-group')]
+    r.classList.remove('compact', 'icons')
+    groups.forEach((g) => g.classList.remove('collapsed'))
+    const fits = (): boolean => r.scrollWidth <= r.clientWidth + 1
+    if (fits()) return
+    r.classList.add('compact')
+    if (fits()) return
+    // Long groups (e.g. the export formats) fold first, biggest first.
+    const size = (g: HTMLElement): number => g.querySelectorAll('.ribbon-row .cmd').length
+    for (const g of [...groups].filter((g) => size(g) >= 4).sort((a, b) => size(b) - size(a))) {
+      g.classList.add('collapsed')
+      if (fits()) return
+    }
+    r.classList.add('icons')
+    if (fits()) return
+    for (const g of [...groups].reverse()) {
+      if (g.querySelectorAll('.ribbon-row .cmd').length < 2) continue
+      g.classList.add('collapsed')
+      if (fits()) return
+    }
+  }
+
+  private openGroupMenu(anchor: HTMLElement, commands: Command[]): void {
+    document.querySelector('.menu.group-menu')?.remove()
+    const m = h('div', 'menu group-menu')
+    for (const c of commands) {
+      const b = h('button', 'menu-item')
+      b.innerHTML = `<span class="mi-icon">${c.icon}</span><span class="mi-label">${c.label}</span><span class="mi-key">${c.shortcut ?? ''}</span>`
+      b.disabled = c.isEnabled ? !c.isEnabled(this.ctx) : false
+      if (c.isActive?.(this.ctx)) b.classList.add('on')
+      b.addEventListener('click', () => {
+        close()
+        void this.run(c)
+      })
+      m.append(b)
+    }
+    const rect = anchor.getBoundingClientRect()
+    m.style.left = `${Math.min(rect.left, window.innerWidth - 240)}px`
+    m.style.top = `${rect.bottom + 2}px`
+    document.body.append(m)
+    const close = (): void => {
+      m.remove()
+      window.removeEventListener('pointerdown', outside, true)
+      window.removeEventListener('keydown', esc, true)
+    }
+    const outside = (e: Event): void => {
+      if (!m.contains(e.target as Node)) close()
+    }
+    const esc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', outside, true)
+    window.addEventListener('keydown', esc, true)
   }
 
   refreshRibbon(): void {

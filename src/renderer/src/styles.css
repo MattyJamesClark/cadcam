@@ -73,8 +73,17 @@ button { font: inherit; color: inherit; }
 /* ribbon */
 .ribbon {
   display: flex; gap: 0; min-height: 86px; padding: 6px 8px 0; background: var(--panel);
-  border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden;
+  border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
 }
+/* Narrow windows (see Shell.fitRibbon). */
+.ribbon .group-drop { display: none; }
+.ribbon-group.collapsed .ribbon-row { display: none; }
+.ribbon-group.collapsed .group-drop { display: flex; flex: 1; }
+.ribbon.compact .ribbon-group { padding: 0 4px; }
+.ribbon.compact .cmd { min-width: 44px; padding: 5px 3px; font-size: 11px; }
+.ribbon.icons .ribbon-row .cmd { min-width: 34px; }
+.ribbon.icons .ribbon-row .cmd span { display: none; }
+.ribbon.icons .ribbon-row .cmd { justify-content: center; }
 .ribbon-group { display: flex; flex-direction: column; padding: 0 8px; border-right: 1px solid var(--line); }
 .ribbon-group:last-child { border-right: none; }
 .ribbon-row { display: flex; gap: 2px; flex: 1; }
@@ -240,7 +249,7 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .history-now { margin: 3px 6px; padding: 3px 6px; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); color: var(--accent); font-size: 11px; text-align: center; }
 
 /* ---- tool panels (Translate...) ---- */
-.tool-panel { position: absolute; top: 12px; left: 12px; z-index: 5; width: 230px; padding: 10px 12px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 12px; }
+.tool-panel { position: absolute; top: 12px; left: 12px; z-index: 5; width: 230px; max-height: calc(100% - 24px); overflow-y: auto; box-sizing: border-box; padding: 10px 12px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 12px; }
 .tool-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
 .tool-name { font-weight: 600; font-size: 13px; }
 .tool-sub { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
