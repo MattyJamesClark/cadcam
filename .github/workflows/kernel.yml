@@ -88,9 +88,11 @@ jobs:
           # Legacy wasm exceptions first; exnref (Chromium 137+, Electron 36+) if binaryen chokes on it.
           # Objects are already -O3; the link-time wasm-opt pass is a bonus, and some
           # binaryen versions fail to parse large EH modules, so fall back without it.
-          if link -O3; then echo "${{ matrix.variant }}, link -O3" > out/BUILD.txt
-          elif link -O0; then echo "${{ matrix.variant }}, link -O0" > out/BUILD.txt
-          else echo "all links failed"; exit 1; fi
+          # The module must also compile in V8 (an LLVM bug once produced an invalid one).
+          valid() { "$EMSDK_NODE" -e "new WebAssembly.Module(require('fs').readFileSync('out/cadkernel.wasm'))"; }
+          if link -O3 && valid; then echo "${{ matrix.variant }}, link -O3" > out/BUILD.txt
+          elif link -O0 && valid; then echo "${{ matrix.variant }}, link -O0" > out/BUILD.txt
+          else echo "no valid kernel"; exit 1; fi
           cat out/BUILD.txt
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
           ls -la out
