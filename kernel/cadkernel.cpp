@@ -232,34 +232,41 @@ struct Bodies {
   std::vector<bool> solid;
 };
 
-/** Split a shape into bodies: each solid, each shell not in a solid, and loose faces / curves as one more. */
+/**
+ * Split a shape into bodies: each solid, each shell not in a solid, and the
+ * loose faces / curves of each compound as one more (a surface model).
+ */
 Bodies bodiesOf(const TopoDS_Shape& shape) {
   Bodies b;
   BRep_Builder bb;
-  TopoDS_Compound rest;
-  bb.MakeCompound(rest);
-  bool hasRest = false;
   std::function<void(const TopoDS_Shape&)> walk = [&](const TopoDS_Shape& s) {
-    switch (s.ShapeType()) {
-      case TopAbs_COMPOUND:
-      case TopAbs_COMPSOLID:
-        for (TopoDS_Iterator it(s); it.More(); it.Next()) walk(it.Value());
-        break;
-      case TopAbs_SOLID:
-      case TopAbs_SHELL:
-        b.shapes.push_back(s);
-        b.solid.push_back(s.ShapeType() == TopAbs_SOLID);
-        break;
-      default:
-        bb.Add(rest, s);
+    if (s.ShapeType() == TopAbs_SOLID || s.ShapeType() == TopAbs_SHELL) {
+      b.shapes.push_back(s);
+      b.solid.push_back(s.ShapeType() == TopAbs_SOLID);
+      return;
+    }
+    if (s.ShapeType() != TopAbs_COMPOUND && s.ShapeType() != TopAbs_COMPSOLID) {
+      b.shapes.push_back(s);
+      b.solid.push_back(false);
+      return;
+    }
+    TopoDS_Compound rest;
+    bb.MakeCompound(rest);
+    bool hasRest = false;
+    for (TopoDS_Iterator it(s); it.More(); it.Next()) {
+      const TopAbs_ShapeEnum t = it.Value().ShapeType();
+      if (t == TopAbs_COMPOUND || t == TopAbs_COMPSOLID || t == TopAbs_SOLID || t == TopAbs_SHELL) walk(it.Value());
+      else {
+        bb.Add(rest, it.Value());
         hasRest = true;
+      }
+    }
+    if (hasRest) {
+      b.shapes.push_back(rest);
+      b.solid.push_back(false);
     }
   };
   if (!shape.IsNull()) walk(shape);
-  if (hasRest) {
-    b.shapes.push_back(rest);
-    b.solid.push_back(false);
-  }
   return b;
 }
 
