@@ -364,3 +364,9 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .planes-panel .tool-body, .planes-panel { overflow-x: hidden; }
 .vp-strip { flex-wrap: wrap; justify-content: center; row-gap: 4px; max-width: min(820px, calc(100% - 20px)); overflow: visible; }
 .vs-field input { width: 40px; }
+.vp-filterbar { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: repeat(2, 34px); gap: 3px; padding: 5px; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--border, #444); border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,.25); z-index: 5; }
+.vp-filterbar .vf-btn:first-child { grid-column: 1 / -1; width: auto; }
+.vf-btn { width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.vf-btn svg { width: 20px; height: 20px; }
+.vf-btn:hover { background: var(--panel-3); color: var(--text); }
+.vf-btn.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--text); }
