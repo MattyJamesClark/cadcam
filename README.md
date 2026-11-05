@@ -39,7 +39,8 @@ wheel direction, and showing/hiding the view cube and triad. They're saved on th
 
 Drag files onto the window to merge them into the current design.
 
-**Formats today:** import STEP, IGES and BREP through the OpenCascade kernel, plus Rhino 3DM,
+**Formats today:** import STEP, IGES and BREP through the CAD kernel (OpenCascade 7.9 compiled
+to WebAssembly from `kernel/`, see below), plus Rhino 3DM,
 STL, OBJ, PLY, glTF/GLB, 3MF, FBX, Collada, 3DS, VRML, AMF, VTK, USD and point clouds.
 Export STL, OBJ, PLY, GLB.
 
@@ -68,6 +69,15 @@ src/
     core/      Shell (tabs, ribbon, model tree, status bar), Viewport, Document, file-format registry
     modules/   One folder per top tab. Each exports a CadModule.
 ```
+
+### CAD kernel
+
+`kernel/cadkernel.cpp` reads STEP/IGES/BREP with OpenCascade's XCAF and returns the assembly tree
+and meshes in one call. The **CAD kernel** workflow (`.github/workflows/kernel.yml`) builds it with
+Emscripten and native wasm exceptions and commits `cadkernel.js/.wasm` to
+`src/renderer/public/vendor/cadkernel/`. It runs when anything in `kernel/` changes; the
+OpenCascade build (about 45 minutes) is cached. `kernel/build.sh` works around an LLVM bug that
+miscompiles a few OpenCascade functions at -O3 by rebuilding just those files at -O1.
 
 ### Adding a module
 

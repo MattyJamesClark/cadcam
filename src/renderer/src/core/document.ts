@@ -45,7 +45,7 @@ const newId = (): string => `n${nextId++}`
 const EDGE_TAG = '__edges'
 /** Names exporters give bodies that tell the user nothing. */
 /** Names exporters give bodies that tell the user nothing. Part numbers (long digit runs) are kept. */
-const GENERIC = /^((solid|body|mesh|shape|part|object|geometry|default|node)[\s_-]*\d*|\d{0,2})$/i
+const GENERIC = /^((solid|body|mesh|shape|part|object|geometry|default|node|compound|shell)[\s_-]*\d*|\d{0,2})$/i
 
 const isRenderable = (o: THREE.Object3D): boolean =>
   ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLineSegments) &&
@@ -370,7 +370,7 @@ function dedupeNames(n: DocNode): void {
   let i = 0
   const seen = new Map<string, number>()
   for (const c of n.children) {
-    if (!c.name || GENERIC.test(c.name)) c.name = c.kind === 'body' ? `Body ${++i}` : c.kind === 'part' ? `Part ${++i}` : `Assembly ${++i}`
+    if (!c.name || GENERIC.test(c.name)) c.name = c.kind === 'body' ? (c.object.userData.wireBody ? `Wireframe ${++i}` : `Body ${++i}`) : c.kind === 'part' ? `Part ${++i}` : `Assembly ${++i}`
     const k = seen.get(c.name) ?? 0
     seen.set(c.name, k + 1)
     if (k > 0) c.name = `${c.name} (${k + 1})`

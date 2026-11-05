@@ -3,7 +3,5 @@ out/
 dist/
 *.log
 src/renderer/public/vendor/occt/
-src/renderer/public/vendor/ocjs/opencascade.full.*
-src/renderer/public/vendor/ocjs/LICENSE.txt
 src/renderer/public/vendor/rhino3dm/
 *.tsbuildinfo
