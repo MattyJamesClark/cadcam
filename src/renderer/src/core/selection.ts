@@ -4,8 +4,9 @@ import { Emitter } from './events'
 import { Highlights, pickAt, pickKey, type Pick } from './picking'
 
 /**
- * The one selection the whole app works on. Click an item to add it, click it
- * again to take it out (no Ctrl / Shift). What a click can pick is set by the
+ * The one selection the whole app works on. A click selects one item at a
+ * time (clicking it again deselects it); with Shift held, or Multi-select on
+ * (bottom bar), clicks add items and take them out again. What a click can pick is set by the
  * selection filter. Whole bodies live in the document's selection (so the tree,
  * Translate and Delete see them); points, edges and faces are kept here.
  * Previous swaps back the selection before the last change, to recover from a
@@ -28,6 +29,8 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
   private last: Snapshot = { nodes: [], subs: [] }
   private previous: Snapshot | null = null
   private queued: PointerEvent | null = null
+  /** Multi-select button on the bottom bar. */
+  multi = false
 
   /** Points, edges and faces picked (bodies are in doc.selection()). */
   get items(): readonly Pick[] {
@@ -59,7 +62,7 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
       down = null
       if (moved > 4 || vp.blockPick?.()) return
       const p = pickAt(vp, e)
-      if (p) this.toggle(p)
+      if (p) this.pick(p, this.multi || e.shiftKey)
     })
     canvas.addEventListener('pointermove', (e) => {
       const first = !this.queued
@@ -100,6 +103,27 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
     this.hover = p
     if (!same) this.draw()
     this.emit('hover', { pick: p, x, y })
+  }
+
+  /** Select the item alone, or with `add` add it / take it out. Picking the only selected item again deselects it. */
+  pick(p: Pick, add: boolean): void {
+    if (add) return this.toggle(p)
+    const doc = this.ctx!.doc
+    const id = p.object.userData.docId as string | undefined
+    const k = pickKey(p)
+    const alone =
+      p.kind === 'body'
+        ? !this.subs.length && this.nodes.length === 1 && this.nodes[0] === id
+        : !this.nodes.length && this.subs.length === 1 && pickKey(this.subs[0]) === k
+    if (alone) return this.clear()
+    if (p.kind === 'body') {
+      this.subs = []
+      if (id) doc.select([id])
+      return
+    }
+    this.subs = [p]
+    if (this.nodes.length) doc.select([])
+    else this.changed()
   }
 
   /** Add the item, or take it out if it is already selected. */

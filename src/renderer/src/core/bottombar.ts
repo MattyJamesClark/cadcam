@@ -6,7 +6,7 @@ import { el } from './toolpanel'
 
 /**
  * Small icon-only toolbar along the bottom of the viewport: the selection
- * filter, Previous selection, Clear selection and what is selected.
+ * filter, Multi-select, Previous selection, Clear selection and what is selected.
  * Modules can add their own buttons later with addBottomButton().
  */
 
@@ -76,6 +76,17 @@ export function startBottomBar(ctx: ModuleContext): void {
   selectFilter.on('changed', showFilter)
   showFilter()
 
+  const multi = el('button', 'vb-btn')
+  multi.innerHTML = icons.selMulti
+  const showMulti = (): void => {
+    multi.classList.toggle('narrowed', selection.multi)
+    multi.title = `Multi-select: ${selection.multi ? 'on, clicks add items' : 'off, one item at a time'} (or hold Shift)`
+  }
+  multi.addEventListener('click', () => {
+    selection.multi = !selection.multi
+    showMulti()
+  })
+  showMulti()
   const prev = el('button', 'vb-btn')
   prev.innerHTML = icons.selPrev
   prev.title = 'Previous selection: bring back the selection before the last change'
@@ -88,7 +99,7 @@ export function startBottomBar(ctx: ModuleContext): void {
 
   const wrap = el('div', 'vb-filter-wrap')
   wrap.append(filterBtn, pop)
-  bar.append(wrap, prev, clear, el('span', 'vb-sep'), el('span', 'vb-extra'), count)
+  bar.append(wrap, multi, prev, clear, el('span', 'vb-sep'), el('span', 'vb-extra'), count)
   vp.host.append(bar)
 
   const showSel = (): void => {
