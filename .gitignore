@@ -2,9 +2,8 @@ node_modules/
 out/
 dist/
 *.log
-src/renderer/public/vendor/occt/*.js
-!src/renderer/public/vendor/occt/worker.js
-src/renderer/public/vendor/occt/*.wasm
-src/renderer/public/vendor/occt/*.txt
+src/renderer/public/vendor/occt/
+src/renderer/public/vendor/ocjs/opencascade.full.*
+src/renderer/public/vendor/ocjs/LICENSE.txt
 src/renderer/public/vendor/rhino3dm/
 *.tsbuildinfo

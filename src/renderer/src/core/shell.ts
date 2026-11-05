@@ -214,13 +214,21 @@ export class Shell {
             this.doc.setExpanded(n.id, !n.expanded)
           })
         } else twisty.disabled = true
-        const kindIcon = h('span', 'tree-icon', n.kind === 'file' ? icons.file : n.kind === 'assembly' ? icons.assembly : icons.box)
+        const kindIcon = h(
+          'span',
+          'tree-icon',
+          n.kind === 'file' ? icons.file : n.kind === 'assembly' ? icons.assembly : n.kind === 'part' ? icons.part : icons.box
+        )
         const label = h('span', 'tree-label')
         label.textContent = n.name
-        label.title = n.source ?? n.name
+        label.title = [n.source ?? n.name, n.layers?.length ? `Layer: ${n.layers.join(', ')}` : ''].filter(Boolean).join('\n')
         const kind = h('span', 'tree-kind')
         const bodies = n.kind === 'body' ? 0 : this.doc.bodies(n).length
-        kind.textContent = n.kind === 'body' ? (n.detail ?? '') : [n.detail, `${bodies} ${bodies === 1 ? 'body' : 'bodies'}`].filter(Boolean).join(' · ')
+        const layer = n.layers?.length ? `L: ${n.layers[0]}${n.layers.length > 1 ? '…' : ''}` : ''
+        kind.textContent =
+          n.kind === 'body'
+            ? (n.detail ?? layer)
+            : [n.detail, layer, `${bodies} ${bodies === 1 ? 'body' : 'bodies'}`].filter(Boolean).join(' · ')
         const visible = n.object.visible
         const eye = h('button', 'tree-eye', visible ? icons.eye : icons.eyeOff)
         eye.title = visible ? 'Hide' : 'Show'

@@ -186,6 +186,31 @@ export const homeModule: CadModule = {
       label: 'Edit',
       commands: [
         {
+          id: 'edit.hide',
+          label: 'Hide / Show',
+          icon: icons.eyeOff,
+          shortcut: 'H',
+          tooltip: 'Hide the selected items, or show them again if they are hidden',
+          isEnabled: (ctx) => ctx.doc.selection().length > 0,
+          run: (ctx) => {
+            const nodes = ctx.doc.selectedTopNodes()
+            const anyShown = nodes.some((n) => n.object.visible)
+            ctx.doc.setVisible(
+              nodes.map((n) => n.id),
+              !anyShown
+            )
+            ctx.status(`${anyShown ? 'Hid' : 'Showed'} ${nodes.length} item${nodes.length > 1 ? 's' : ''}`)
+          }
+        },
+        {
+          id: 'edit.show-all',
+          label: 'Show all',
+          icon: icons.eye,
+          shortcut: 'Shift+H',
+          isEnabled: (ctx) => ctx.doc.all().some((n) => !n.object.visible),
+          run: (ctx) => ctx.doc.showAll()
+        },
+        {
           id: 'edit.delete',
           label: 'Delete',
           icon: icons.trash,

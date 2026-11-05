@@ -29,6 +29,7 @@ Navigation is SolidWorks-style by default (change it in Settings, the gear icon 
 | Rotate 15° / 90° | Arrow keys / Shift + arrows (Alt + left/right rolls, Ctrl + arrows pans) |
 | Standard views | Ctrl+1 Front, Ctrl+2 Back, Ctrl+3 Left, Ctrl+4 Right, Ctrl+5 Top, Ctrl+6 Bottom, Ctrl+7 Iso |
 | Select / multi-select | Left-click / Ctrl+click |
+| Hide / show selected, show all | H / Shift+H |
 | Snap to a view | Click a face of the view cube, or an axis letter on the XYZ triad (Shift+click for the opposite side) |
 | Grid on/off | G |
 | New / Open / Import-merge | Ctrl+N / Ctrl+O / Ctrl+I |

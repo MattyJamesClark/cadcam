@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { Emitter } from './events'
 
-export type NodeKind = 'file' | 'assembly' | 'body'
+/** part = one CAD part that holds several bodies. */
+export type NodeKind = 'file' | 'assembly' | 'part' | 'body'
 
 /** One row of the model tree: an imported file, a sub-assembly, or a body. */
 export interface DocNode {
@@ -15,6 +16,8 @@ export interface DocNode {
   detail?: string
   /** Original file name, for file nodes. */
   source?: string
+  /** Layers / levels the source CAD file put this on. */
+  layers?: string[]
   expanded: boolean
 }
 
@@ -106,7 +109,7 @@ export class CadDocument extends Emitter<DocEvents> {
       file.children.forEach((c) => (c.parent = file))
     }
     // A file with nothing recognisable still gets one body so it can be selected.
-    if (file.children.length === 0) this.makeBody(object, opts.name, file)
+    if (file.children.length === 0) this.makeBody(object, (object.name && !GENERIC.test(object.name) && object.name) || opts.name, file)
     dedupeNames(file)
     this.roots.push(file)
     this.root.add(object)
@@ -126,6 +129,7 @@ export class CadDocument extends Emitter<DocEvents> {
 
   private makeNode(object: THREE.Object3D, name: string, kind: NodeKind, parent: DocNode | null): DocNode {
     const n: DocNode = { id: newId(), name, kind, object, children: [], parent, expanded: kind === 'file' }
+    if (object.userData.layers) n.layers = object.userData.layers
     this.nodes.set(n.id, n)
     parent?.children.push(n)
     return n
@@ -140,6 +144,14 @@ export class CadDocument extends Emitter<DocEvents> {
   private buildChildren(obj: THREE.Object3D, parent: DocNode): void {
     for (const child of obj.children) {
       if (child.name === EDGE_TAG) continue
+      // CAD kernel imports say exactly what each object is.
+      const cadKind = child.userData.cadKind as NodeKind | undefined
+      if (cadKind) {
+        if (countBodies(child) === 0) continue
+        if (cadKind === 'body') this.makeBody(child, child.name, parent)
+        else this.buildChildren(child, this.makeNode(child, child.name, cadKind, parent))
+        continue
+      }
       if (isRenderable(child)) {
         this.makeBody(child, child.name, parent)
         continue
@@ -189,10 +201,17 @@ export class CadDocument extends Emitter<DocEvents> {
     this.emit('changed', undefined)
   }
 
-  setVisible(id: string, visible: boolean): void {
-    const n = this.nodes.get(id)
-    if (!n) return
-    n.object.visible = visible
+  setVisible(id: string | string[], visible: boolean): void {
+    for (const i of Array.isArray(id) ? id : [id]) {
+      const n = this.nodes.get(i)
+      if (n) n.object.visible = visible
+    }
+    this.emit('changed', undefined)
+  }
+
+  /** Make everything visible again. */
+  showAll(): void {
+    this.all().forEach((n) => (n.object.visible = true))
     this.emit('changed', undefined)
   }
 
@@ -264,7 +283,7 @@ function dedupeNames(n: DocNode): void {
   let i = 0
   const seen = new Map<string, number>()
   for (const c of n.children) {
-    if (!c.name || GENERIC.test(c.name)) c.name = c.kind === 'body' ? `Body ${++i}` : `Assembly ${++i}`
+    if (!c.name || GENERIC.test(c.name)) c.name = c.kind === 'body' ? `Body ${++i}` : c.kind === 'part' ? `Part ${++i}` : `Assembly ${++i}`
     const k = seen.get(c.name) ?? 0
     seen.set(c.name, k + 1)
     if (k > 0) c.name = `${c.name} (${k + 1})`

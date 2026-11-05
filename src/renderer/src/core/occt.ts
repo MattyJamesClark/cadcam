@@ -1,42 +1,40 @@
 import * as THREE from 'three'
-import { settings, type ImportQuality } from './settings'
+import { settings } from './settings'
 
 /**
- * STEP / IGES / BREP import through OpenCascade (compiled to WebAssembly),
- * running in a background worker so big assemblies don't freeze the UI.
+ * STEP / IGES / BREP import through the full OpenCascade kernel (WebAssembly,
+ * in a background worker). Keeps assemblies, names, colours and layers.
  */
 
-interface OcctMesh {
-  name?: string
-  color?: [number, number, number]
-  brep_faces?: { first: number; last: number; color: [number, number, number] | null }[]
-  attributes: { position: { array: Float32Array }; normal?: { array: Float32Array } }
-  index: { array: Uint32Array }
+type RGB = [number, number, number]
+interface CadNode {
+  name: string
+  kind: 'assembly' | 'part' | 'body'
+  color?: RGB | null
+  layers?: string[]
+  matrix?: number[]
+  mesh?: number
+  children: CadNode[]
 }
-interface OcctNode {
-  name?: string
-  meshes: number[]
-  children: OcctNode[]
+interface CadMesh {
+  position: Float32Array
+  index: Uint32Array
+  faces: [number, number, RGB | null][]
+  edges: Float32Array
 }
-interface OcctResult {
-  root: OcctNode
-  meshes: OcctMesh[]
-}
-
-const QUALITY: Record<ImportQuality, { linearDeflection: number; angularDeflection: number }> = {
-  draft: { linearDeflection: 0.003, angularDeflection: 0.8 },
-  normal: { linearDeflection: 0.001, angularDeflection: 0.35 },
-  fine: { linearDeflection: 0.0003, angularDeflection: 0.15 }
+interface CadResult {
+  root: CadNode
+  meshes: CadMesh[]
 }
 
 let worker: Worker | null = null
 let nextId = 1
-const pending = new Map<number, { resolve: (r: OcctResult) => void; reject: (e: Error) => void }>()
+const pending = new Map<number, { resolve: (r: CadResult) => void; reject: (e: Error) => void }>()
 
 function getWorker(): Worker {
   if (worker) return worker
-  worker = new Worker(new URL('vendor/occt/worker.js', document.baseURI))
-  worker.onmessage = (ev: MessageEvent<{ id: number; result?: OcctResult; error?: string }>) => {
+  worker = new Worker(new URL('vendor/ocjs/worker.mjs', document.baseURI), { type: 'module' })
+  worker.onmessage = (ev: MessageEvent<{ id: number; result?: CadResult; error?: string }>) => {
     const p = pending.get(ev.data.id)
     if (!p) return
     pending.delete(ev.data.id)
@@ -51,90 +49,80 @@ function getWorker(): Worker {
   return worker
 }
 
+/** Start loading the kernel in the background (call at app start). */
+export function warmUpCadKernel(): void {
+  getWorker()
+}
+
 export async function readCadFile(format: 'step' | 'iges' | 'brep', data: ArrayBuffer): Promise<THREE.Object3D> {
-  const q = QUALITY[settings.get().importQuality]
-  const params = { linearUnit: 'millimeter', linearDeflectionType: 'bounding_box_ratio', ...q }
   const id = nextId++
-  const result = await new Promise<OcctResult>((resolve, reject) => {
+  const result = await new Promise<CadResult>((resolve, reject) => {
     pending.set(id, { resolve, reject })
-    // Copy, so the caller's buffer stays usable; transfer the copy.
     const buf = data.slice(0)
-    getWorker().postMessage({ id, format, buffer: buf, params }, [buf])
+    getWorker().postMessage({ id, format, buffer: buf, quality: settings.get().importQuality }, [buf])
   })
   return buildScene(result)
 }
 
-function buildScene(res: OcctResult): THREE.Object3D {
-  // Materials are shared within a body only, so selecting one body never tints another.
-  let materials = new Map<string, THREE.MeshStandardMaterial>()
-  const mat = (c: [number, number, number] | null | undefined): THREE.MeshStandardMaterial => {
-    const key = c ? c.map((v) => v.toFixed(3)).join(',') : 'default'
-    let m = materials.get(key)
-    if (!m) {
-      m = new THREE.MeshStandardMaterial({
-        color: c ? new THREE.Color(c[0], c[1], c[2]) : settings.get().partColor,
-        metalness: 0.15,
-        roughness: 0.55,
-        side: THREE.DoubleSide
-      })
-      if (!c) m.userData.defaultColor = true
-      materials.set(key, m)
+function buildScene(res: CadResult): THREE.Object3D {
+  // One geometry per distinct part, shared by every instance of it.
+  const geometries = res.meshes.map((m) => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3))
+    geo.setIndex(new THREE.BufferAttribute(m.index, 1))
+    geo.computeVertexNormals() // vertices aren't shared between faces, so edges stay sharp
+    geo.userData.edgePositions = m.edges
+    return geo
+  })
+
+  const material = (c: RGB | null | undefined): THREE.MeshStandardMaterial => {
+    const m = new THREE.MeshStandardMaterial({ metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide })
+    if (c) m.color.setRGB(c[0], c[1], c[2]) // OCCT colours are linear RGB, as three.js expects
+    else {
+      m.color.set(settings.get().partColor)
+      m.userData.defaultColor = true
     }
     return m
   }
 
-  const meshes = res.meshes.map((src, i) => {
-    materials = new Map()
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(src.attributes.position.array, 3))
-    if (src.attributes.normal) geo.setAttribute('normal', new THREE.BufferAttribute(src.attributes.normal.array, 3))
-    geo.setIndex(new THREE.BufferAttribute(src.index.array, 1))
-    if (!src.attributes.normal) geo.computeVertexNormals()
-
-    // Per-face colours become geometry groups; otherwise one material for the body.
-    const faces = src.brep_faces ?? []
-    const faceColours = faces.some((f) => f.color)
-    let material: THREE.Material | THREE.Material[]
-    if (faceColours) {
-      const list: THREE.MeshStandardMaterial[] = []
-      const indexOf = new Map<THREE.MeshStandardMaterial, number>()
-      for (const f of faces) {
-        const m = mat(f.color ?? src.color)
-        if (!indexOf.has(m)) {
-          indexOf.set(m, list.length)
-          list.push(m)
+  const build = (n: CadNode, inherited: RGB | null): THREE.Object3D => {
+    const color = n.color ?? inherited
+    let obj: THREE.Object3D
+    if (n.kind === 'body' && n.mesh !== undefined) {
+      const src = res.meshes[n.mesh]
+      const geo = geometries[n.mesh]
+      const mesh = new THREE.Mesh(geo)
+      const faceColours = src.faces.some((f) => f[2])
+      if (faceColours) {
+        // Per-face colours: one material per distinct colour, as geometry groups.
+        // Groups live on the shared geometry, so set them up once.
+        const keyOf = (c: RGB | null): string => (c ? c.map((v) => v.toFixed(4)).join(',') : 'body')
+        const keys: string[] = []
+        if (!geo.userData.grouped) {
+          for (const [first, last, c] of src.faces) {
+            const k = keyOf(c)
+            if (!keys.includes(k)) keys.push(k)
+            geo.addGroup(first * 3, (last - first + 1) * 3, keys.indexOf(k))
+          }
+          geo.userData.grouped = keys
         }
-        geo.addGroup(f.first * 3, (f.last - f.first + 1) * 3, indexOf.get(m)!)
+        const groupKeys = geo.userData.grouped as string[]
+        mesh.material = groupKeys.map((k) =>
+          material(k === 'body' ? color : (k.split(',').map(Number) as RGB))
+        )
+      } else {
+        mesh.material = material(color)
       }
-      material = list
+      obj = mesh
     } else {
-      material = mat(src.color)
+      obj = new THREE.Group()
+      for (const c of n.children) obj.add(build(c, color))
     }
-    const mesh = new THREE.Mesh(geo, material)
-    mesh.name = src.name || `Body ${i + 1}`
-    // Keep B-rep face ranges for face picking in later modules.
-    mesh.userData.brepFaces = faces.map((f) => [f.first, f.last])
-    return mesh
-  })
-
-  // Every mesh index is used once per occurrence; clone repeats so the
-  // scene graph stays a tree.
-  const used = new Set<number>()
-  const build = (node: OcctNode): THREE.Group => {
-    const g = new THREE.Group()
-    g.name = node.name || ''
-    for (const i of node.meshes) {
-      g.add(used.has(i) ? cloneBody(meshes[i]) : meshes[i])
-      used.add(i)
-    }
-    for (const c of node.children) g.add(build(c))
-    return g
+    obj.name = n.name
+    obj.userData.cadKind = n.kind
+    if (n.layers?.length) obj.userData.layers = n.layers
+    if (n.matrix) new THREE.Matrix4().fromArray(n.matrix).decompose(obj.position, obj.quaternion, obj.scale)
+    return obj
   }
-  return build(res.root)
-}
-
-function cloneBody(m: THREE.Mesh): THREE.Mesh {
-  const c = m.clone()
-  c.material = Array.isArray(m.material) ? m.material.map((x) => x.clone()) : m.material.clone()
-  return c
+  return build(res.root, null)
 }

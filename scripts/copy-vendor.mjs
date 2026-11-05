@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const out = join(root, 'src/renderer/public/vendor')
 const copies = [
-  ['node_modules/occt-import-js/dist/occt-import-js.js', 'occt/occt-import-js.js'],
-  ['node_modules/occt-import-js/dist/occt-import-js.wasm', 'occt/occt-import-js.wasm'],
-  ['node_modules/occt-import-js/dist/license.occt.txt', 'occt/license.occt.txt'],
+  ['node_modules/opencascade.js/dist/opencascade.full.js', 'ocjs/opencascade.full.js'],
+  ['node_modules/opencascade.js/dist/opencascade.full.wasm', 'ocjs/opencascade.full.wasm'],
+  ['node_modules/opencascade.js/LICENSE', 'ocjs/LICENSE.txt'],
   ['node_modules/rhino3dm/rhino3dm.js', 'rhino3dm/rhino3dm.js'],
   ['node_modules/rhino3dm/rhino3dm.wasm', 'rhino3dm/rhino3dm.wasm']
 ]

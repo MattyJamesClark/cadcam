@@ -2,11 +2,13 @@ import './styles.css'
 import { registerBuiltinFormats } from './core/formats'
 import { extOf, importerFor, unsupportedReason } from './core/io'
 import { Shell } from './core/shell'
+import { warmUpCadKernel } from './core/occt'
 import { initTheme } from './core/settingsDialog'
 import { modules } from './modules'
 import { importFiles } from './modules/home'
 
 registerBuiltinFormats()
+setTimeout(warmUpCadKernel, 1500) // compile the CAD kernel in the background after start-up
 initTheme()
 
 const shell = new Shell(document.getElementById('app')!, modules)

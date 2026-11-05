@@ -9,6 +9,17 @@ import * as THREE from 'three'
  * fall back to a crease-angle test.
  */
 export function featureEdges(mesh: THREE.Mesh): THREE.BufferGeometry {
+  // Exact edges sampled from the CAD curves by the kernel (shared between instances).
+  const exact = mesh.geometry.userData.edgePositions as Float32Array | undefined
+  if (exact) {
+    let g = mesh.geometry.userData.edgeGeometry as THREE.BufferGeometry | undefined
+    if (!g) {
+      g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.BufferAttribute(exact, 3))
+      mesh.geometry.userData.edgeGeometry = g
+    }
+    return g
+  }
   const faces = mesh.userData.brepFaces as [number, number][] | undefined
   if (faces?.length) return brepEdges(mesh.geometry, faces)
   return new THREE.EdgesGeometry(mesh.geometry, 25)

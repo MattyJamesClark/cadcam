@@ -28,7 +28,7 @@
     "electron": "^39.0.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.1",
-    "occt-import-js": "^0.0.23",
+    "opencascade.js": "^2.0.0-beta.b5ff984",
     "rhino3dm": "^8.17.0",
     "three": "^0.180.0",
     "typescript": "^5.9.3",
