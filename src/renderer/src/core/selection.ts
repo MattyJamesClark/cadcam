@@ -15,6 +15,7 @@ import { Highlights, pickAt, pickKey, type Pick } from './picking'
 
 const HOVER = 0xfff1a8
 const SELECTED = 0xff9f1c
+const DWELL_MS = 900
 
 interface Snapshot {
   nodes: string[]
@@ -61,17 +62,33 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
       if (moved > 4 || vp.blockPick?.()) return
-      const p = pickAt(vp, e)
+      const p = this.dwellBody ?? pickAt(vp, e)
       if (p) this.pick(p, this.multi || e.shiftKey)
       // Empty space clears (Previous brings it back); a body the filter skips does not.
       else if (!vp.hitTest(vp.ndcOf(e))) this.clear()
+    })
+    // Double-click: the whole body under the pointer.
+    canvas.addEventListener('dblclick', (e) => {
+      if (e.button !== 0 || vp.blockPick?.()) return
+      const b = this.bodyAt(e)
+      if (!b) return
+      const id = b.object.userData.docId as string
+      if (this.multi || e.shiftKey) {
+        if (!ctx.doc.selection().includes(id)) this.toggle(b)
+      } else {
+        this.subs = []
+        ctx.doc.select([id])
+      }
     })
     canvas.addEventListener('pointermove', (e) => {
       const first = !this.queued
       this.queued = e
       if (first) requestAnimationFrame(() => this.move())
     })
-    canvas.addEventListener('pointerleave', () => this.setHover(null, 0, 0))
+    canvas.addEventListener('pointerleave', () => {
+      this.dwellBody = null
+      this.setHover(null, 0, 0)
+    })
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented || vp.blockPick?.()) return
       const t = e.target as HTMLElement
@@ -97,13 +114,42 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
     const vp = this.ctx?.viewport
     if (!e || !vp) return
     if (e.buttons || vp.blockPick?.()) return this.setHover(null, e.clientX, e.clientY)
+    // Holding still after the body took over: keep it until the pointer really moves.
+    if (this.dwellBody && Math.hypot(e.clientX - this.dwellAt.x, e.clientY - this.dwellAt.y) < 6) return
+    this.dwellBody = null
     this.setHover(pickAt(vp, e), e.clientX, e.clientY)
+  }
+
+  /** Pause over a face / edge / point and the highlight grows to its whole body; a click then picks the body. */
+  private dwellBody: Pick | null = null
+  private dwellAt = { x: 0, y: 0 }
+  private dwellTimer = 0
+
+  private bodyAt(e: { clientX: number; clientY: number }): Pick | null {
+    const vp = this.ctx!.viewport
+    const hit = vp.hitTest(vp.ndcOf(e))
+    if (!hit?.object.userData.docId) return null
+    return { kind: 'body', object: hit.object, index: -1, point: hit.point.clone() }
   }
 
   private setHover(p: Pick | null, x: number, y: number): void {
     const same = (p && pickKey(p)) === (this.hover && pickKey(this.hover))
     this.hover = p
-    if (!same) this.draw()
+    if (!same) {
+      this.draw()
+      clearTimeout(this.dwellTimer)
+      if (p && p.kind !== 'body')
+        this.dwellTimer = window.setTimeout(() => {
+          if (this.hover !== p) return
+          const body = this.bodyAt({ clientX: x, clientY: y })
+          if (!body || body.object !== p.object) return
+          this.dwellBody = body
+          this.dwellAt = { x, y }
+          this.hover = body
+          this.draw()
+          this.emit('hover', { pick: body, x, y })
+        }, DWELL_MS)
+    }
     this.emit('hover', { pick: p, x, y })
   }
 

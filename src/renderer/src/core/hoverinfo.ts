@@ -61,7 +61,7 @@ class HoverInfo {
   private async refresh(): Promise<void> {
     const hover = this.hover
     this.label.hidden = true
-    if (!hover || !enabled || hover.kind === 'body') return
+    if (!hover || !enabled) return
     const text = await this.textOf(hover)
     if (hover === this.hover && text) {
       this.label.textContent = text
@@ -82,8 +82,13 @@ class HoverInfo {
     if (hit !== undefined) return hit
     let text = ''
     const geo = (p.object as THREE.Mesh).geometry
+    if (p.kind === 'body') {
+      const n = this.ctx.doc.get(p.object.userData.docId as string)
+      if (!n) return 'Body'
+      return `Body  ${/^(Body|Wireframe) \d+$/.test(n.name) && n.parent ? `${n.parent.name} › ${n.name}` : n.name}`
+    }
     if (p.kind === 'point') text = `${p.snap === 'centre' ? 'Centre' : p.snap === 'quadrant' ? 'Quadrant' : p.snap === 'mid' ? 'Midpoint' : 'Point'}  ${fmt(p.point.x)}, ${fmt(p.point.y)}, ${fmt(p.point.z)}`
-    else if (geo?.userData.brep && p.kind !== 'body') {
+    else if (geo?.userData.brep) {
       try {
         p.object.updateMatrixWorld()
         const res = await measureCad([{ brep: geo.userData.brep as Uint8Array, kind: p.kind, index: p.index, matrix: rowMajor(p.object.matrixWorld) }])
