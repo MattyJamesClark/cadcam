@@ -42,6 +42,7 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
   if (!files.length) return
   if (replace) ctx.doc.clear()
   let ok = 0
+  const tAll = performance.now()
   for (const f of files) {
     const imp = importerFor(f.name)
     if (!imp) {
@@ -52,7 +53,9 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
     ctx.status(`Reading ${f.name}${imp.solid ? ' with the CAD kernel' : ''}…`)
     let obj
     try {
-      obj = await loadFile(imp, f.data, f.name)
+      obj = await loadFile(imp, f.data, f.name, (stage, done, total) =>
+        ctx.status(`${f.name}: ${stage}${total ? ` ${done} of ${total}` : ''}…`)
+      )
     } catch (e) {
       ctx.status(`${f.name}: couldn't read it (${(e as Error).message ?? e})`, 'error')
       continue
@@ -67,7 +70,9 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
   ctx.doc.emit('changed', undefined)
   if (ok) {
     ctx.viewport.fitAll()
-    ctx.status(`${replace ? 'Opened' : 'Merged'} ${ok} file${ok > 1 ? 's' : ''}`, 'success')
+    const secs = ((performance.now() - tAll) / 1000).toFixed(1)
+    const what = ok === 1 && files.length === 1 ? files[0].name : `${ok} files`
+    ctx.status(`${replace ? 'Opened' : 'Merged'} ${what} in ${secs} s`, 'success')
   }
 }
 

@@ -14,7 +14,7 @@ export interface Importer {
   unitScale?: number
   /** True for B-rep CAD formats read through the CAD kernel. */
   solid?: boolean
-  load(data: ArrayBuffer, fileName: string): Promise<THREE.Object3D>
+  load(data: ArrayBuffer, fileName: string, progress?: (stage: string, done?: number, total?: number) => void): Promise<THREE.Object3D>
 }
 
 export interface Exporter {
@@ -45,8 +45,13 @@ export function extOf(fileName: string): string {
 }
 
 /** Load a file with the right importer and convert it to Z-up. */
-export async function loadFile(imp: Importer, data: ArrayBuffer, fileName: string): Promise<THREE.Object3D> {
-  const obj = await imp.load(data, fileName)
+export async function loadFile(
+  imp: Importer,
+  data: ArrayBuffer,
+  fileName: string,
+  progress?: (stage: string, done?: number, total?: number) => void
+): Promise<THREE.Object3D> {
+  const obj = await imp.load(data, fileName, progress)
   if (imp.upAxis !== 'y' && !imp.unitScale) return obj
   const wrap = new THREE.Group()
   wrap.name = obj.name

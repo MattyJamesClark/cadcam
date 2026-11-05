@@ -311,6 +311,14 @@ export class Viewport extends Emitter<ViewportEvents> {
         ;((o as THREE.LineSegments).material as THREE.LineBasicMaterial).color.copy(on ? SELECT_COLOR : edgeColor)
         return
       }
+      if (o.userData.wireBody) {
+        // Wireframe geometry from the CAD file: its own colour, accent when selected.
+        const mat = (o as THREE.LineSegments).material as THREE.LineBasicMaterial
+        if (!mat.userData.base) mat.userData.base = mat.color.clone()
+        const on = this.doc.isSelected(o.userData.docId)
+        mat.color.copy(on ? SELECT_COLOR : mat.userData.defaultColor ? edgeColor : mat.userData.base)
+        return
+      }
       if (!mesh.isMesh) return
       const on = this.doc.isSelected(mesh.userData.docId)
       for (const m of materialsOf(mesh)) {
@@ -338,6 +346,8 @@ export class Viewport extends Emitter<ViewportEvents> {
   private pickHit(ndc: THREE.Vector2): THREE.Intersection | undefined {
     this.nav.applyTo(this.camera)
     this.raycaster.setFromCamera(ndc, this.camera)
+    // Lines (wireframe geometry) are picked within a few pixels.
+    this.raycaster.params.Line.threshold = this.nav.pose.dist * 0.006
     return this.raycaster
       .intersectObject(this.doc.root, true)
       .find((h) => isVisible(h.object) && h.object.name !== EDGE_TAG)

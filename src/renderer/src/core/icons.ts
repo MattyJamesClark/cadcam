@@ -37,6 +37,8 @@ export const icons = {
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
   file: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'),
   assembly: svg('<path d="M3 8l5-3 5 3v6l-5 3-5-3z"/><path d="M11 13l5-3 5 3v6l-5 3-5-3z"/>'),
+  layers: svg('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/>'),
+  curve: svg('<path d="M4 19c3-10 6-14 9-9s5 2 7-5"/><circle cx="4" cy="19" r="1.5"/><circle cx="20" cy="5" r="1.5"/>'),
   chevron: svg('<path d="m9 6 6 6-6 6"/>'),
   hlr: svg('<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="m4 7 8 4 8-4M12 11v10"/>'),
   update: svg('<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/>')

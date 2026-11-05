@@ -39,8 +39,23 @@ wheel direction, and showing/hiding the view cube and triad. They're saved on th
 
 Drag files onto the window to merge them into the current design.
 
-**Formats today:** import STL, OBJ, PLY, glTF/GLB, 3MF. Export STL, OBJ, PLY, GLB.
-STEP/IGES (true solids) arrive with the Part Design module.
+**Formats today:** import STEP, IGES and BREP through the OpenCascade kernel, plus Rhino 3DM,
+STL, OBJ, PLY, glTF/GLB, 3MF, FBX, Collada, 3DS, VRML, AMF, VTK, USD and point clouds.
+Export STL, OBJ, PLY, GLB.
+
+## Model tree, layers and properties
+
+STEP/IGES imports keep the structure of the source file: assemblies, parts, multi-body parts,
+names, colours (per part, body and face) and layers. Wireframe curves come in as their own items.
+
+* **Tree / Layers** (top of the side panel): switch between the assembly tree and the bodies
+  grouped by layer, like the Layers tree in VISI. The eye on a layer hides or shows all of it.
+* **Properties** (bottom of the side panel): for the selection, the name, type, layer, colour,
+  STEP product data (part number, nomenclature, description, revision, source), the file header
+  (author, originating system, STEP schema), and size, surface area, volume and triangle count.
+
+Files that have been opened before load from a cache in a fraction of a second; the cache keeps
+the 24 most recent files and is invalidated when the file changes.
 
 ## Architecture
 

@@ -47,9 +47,9 @@ const pointsOf = (geo: THREE.BufferGeometry): THREE.Points =>
 /** Every 3D format we can read and write. 2D formats (DXF, DWG) come later. */
 export function registerBuiltinFormats(): void {
   // ---- B-rep solids via OpenCascade -------------------------------------
-  registerImporter({ name: 'STEP', extensions: ['step', 'stp'], solid: true, load: (d) => readCadFile('step', d) })
-  registerImporter({ name: 'IGES', extensions: ['iges', 'igs'], solid: true, load: (d) => readCadFile('iges', d) })
-  registerImporter({ name: 'OpenCascade BREP', extensions: ['brep', 'brp'], solid: true, load: (d) => readCadFile('brep', d) })
+  registerImporter({ name: 'STEP', extensions: ['step', 'stp'], solid: true, load: (d, _n, p) => readCadFile('step', d, p) })
+  registerImporter({ name: 'IGES', extensions: ['iges', 'igs'], solid: true, load: (d, _n, p) => readCadFile('iges', d, p) })
+  registerImporter({ name: 'OpenCascade BREP', extensions: ['brep', 'brp'], solid: true, load: (d, _n, p) => readCadFile('brep', d, p) })
   registerImporter({
     name: 'Rhino 3DM',
     extensions: ['3dm'],

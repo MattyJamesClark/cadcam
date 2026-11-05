@@ -18,7 +18,21 @@ export interface DocNode {
   source?: string
   /** Layers / levels the source CAD file put this on. */
   layers?: string[]
+  /** Product data from the source file (part number, description...) or, for files, header data. */
+  props?: Record<string, string>
   expanded: boolean
+}
+
+/** Geometry facts about a node, for the properties panel. */
+export interface Measure {
+  bodies: number
+  triangles: number
+  /** Axis-aligned size in world space (mm). */
+  size: THREE.Vector3 | null
+  /** Surface area (mm²). */
+  area: number
+  /** Enclosed volume (mm³); null if any body is open or wireframe. */
+  volume: number | null
 }
 
 type DocEvents = {
@@ -30,7 +44,8 @@ let nextId = 1
 const newId = (): string => `n${nextId++}`
 const EDGE_TAG = '__edges'
 /** Names exporters give bodies that tell the user nothing. */
-const GENERIC = /^(solid|body|mesh|shape|part|object|geometry|default|node)?[\s_-]*\d*$/i
+/** Names exporters give bodies that tell the user nothing. Part numbers (long digit runs) are kept. */
+const GENERIC = /^((solid|body|mesh|shape|part|object|geometry|default|node)[\s_-]*\d*|\d{0,2})$/i
 
 const isRenderable = (o: THREE.Object3D): boolean =>
   ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLineSegments) &&
@@ -100,10 +115,12 @@ export class CadDocument extends Emitter<DocEvents> {
     const file = this.makeNode(object, opts.name, 'file', null)
     file.detail = opts.format
     file.source = opts.source
+    if (object.userData.fileProps) file.props = object.userData.fileProps
     this.buildChildren(object, file)
     // A file holding exactly one assembly is that assembly: lift its contents up.
     if (file.children.length === 1 && file.children[0].kind === 'assembly') {
       const only = file.children[0]
+      if (only.layers && !file.layers) file.layers = only.layers
       this.nodes.delete(only.id)
       file.children = only.children
       file.children.forEach((c) => (c.parent = file))
@@ -130,6 +147,7 @@ export class CadDocument extends Emitter<DocEvents> {
   private makeNode(object: THREE.Object3D, name: string, kind: NodeKind, parent: DocNode | null): DocNode {
     const n: DocNode = { id: newId(), name, kind, object, children: [], parent, expanded: kind === 'file' }
     if (object.userData.layers) n.layers = object.userData.layers
+    if (object.userData.props) n.props = object.userData.props
     this.nodes.set(n.id, n)
     parent?.children.push(n)
     return n
@@ -257,7 +275,76 @@ export class CadDocument extends Emitter<DocEvents> {
     this.emit('selection', this.selection())
   }
 
+  /** Layers a node is on: its own, else the nearest parent's. */
+  layersOf(n: DocNode): string[] {
+    for (let p: DocNode | null = n; p; p = p.parent) if (p.layers?.length) return p.layers
+    return []
+  }
+
+  /** Every layer used in the document, with the bodies on it ('' = no layer). */
+  layerMap(): Map<string, DocNode[]> {
+    const map = new Map<string, DocNode[]>()
+    for (const b of this.bodies()) {
+      const ls = this.layersOf(b)
+      for (const l of ls.length ? ls : ['']) {
+        if (!map.has(l)) map.set(l, [])
+        map.get(l)!.push(b)
+      }
+    }
+    return map
+  }
+
   // ---- geometry ----------------------------------------------------------
+
+  /** Bodies, triangles, size, area and volume of the given nodes (world space). */
+  measure(nodes: DocNode[]): Measure {
+    this.root.updateMatrixWorld(true)
+    const seen = new Set<string>()
+    const box = new THREE.Box3()
+    let bodies = 0, triangles = 0, area = 0
+    let volume: number | null = 0
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3()
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3()
+    for (const top of nodes)
+      for (const body of collect(top)) {
+        if (body.kind !== 'body' || seen.has(body.id)) continue
+        seen.add(body.id)
+        bodies++
+        body.object.traverse((o) => {
+          if (!isRenderable(o)) return
+          box.expandByObject(o, false)
+          const mesh = o as THREE.Mesh
+          if (!mesh.isMesh) {
+            volume = null
+            return
+          }
+          const pos = mesh.geometry.attributes.position
+          const idx = mesh.geometry.index
+          const m = mesh.matrixWorld
+          const n = idx ? idx.count : pos.count
+          triangles += n / 3
+          let vol = 0
+          for (let i = 0; i < n; i += 3) {
+            const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2
+            a.fromBufferAttribute(pos, i0).applyMatrix4(m)
+            b.fromBufferAttribute(pos, i1).applyMatrix4(m)
+            c.fromBufferAttribute(pos, i2).applyMatrix4(m)
+            area += ab.subVectors(b, a).cross(ac.subVectors(c, a)).length() / 2
+            vol += a.dot(ab.crossVectors(b, c)) / 6
+          }
+          if (volume !== null) volume += Math.abs(vol)
+        })
+      }
+    // A body made of loose faces has no meaningful volume.
+    const closed = nodes.every((t) => collect(t).every((n) => n.kind !== 'body' || n.object.userData.solid !== false))
+    return {
+      bodies,
+      triangles,
+      size: box.isEmpty() ? null : box.getSize(new THREE.Vector3()),
+      area,
+      volume: closed ? volume : null
+    }
+  }
 
   bounds(nodes?: DocNode[]): THREE.Box3 {
     this.root.updateMatrixWorld(true)
