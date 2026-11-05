@@ -298,6 +298,96 @@ export class CadDocument extends Emitter<DocEvents> {
     for (const d of collect(n)) this.nodes.set(d.id, d)
   }
 
+  /** Move nodes by a distance in world space (one undo step). */
+  translate(ids: string[], delta: THREE.Vector3): void {
+    const list = this.topOf(ids)
+    if (!list.length || delta.lengthSq() === 0) return
+    const moves = list.map((n) => {
+      const from = n.object.position.clone()
+      const to = from.clone().add(localDelta(n.object, delta))
+      return { n, from, to }
+    })
+    const apply = (to: boolean): void => {
+      for (const m of moves) {
+        m.n.object.position.copy(to ? m.to : m.from)
+        m.n.object.updateMatrixWorld(true)
+      }
+      this.emit('changed', undefined)
+    }
+    apply(true)
+    this.history.record({ label: list.length === 1 ? `Move ${list[0].name}` : `Move ${list.length} items`, undo: () => apply(false), redo: () => apply(true) })
+  }
+
+  /** Copies of nodes, the k-th one moved by k × delta (world space). One undo step; selects the copies. */
+  duplicate(ids: string[], delta: THREE.Vector3, count: number): DocNode[] {
+    const list = this.topOf(ids)
+    if (!list.length || count < 1) return []
+    const made: DocNode[] = []
+    this.history.batch(count * list.length === 1 ? `Copy ${list[0].name}` : `Copy ${list.length} item(s) × ${count}`, () => {
+      for (const n of list) {
+        for (let k = 1; k <= count; k++) {
+          const obj = n.object.clone(true)
+          // Own materials, so selecting a copy doesn't light up the original.
+          obj.traverse((o) => {
+            const m = o as THREE.Mesh
+            if (m.material) m.material = Array.isArray(m.material) ? m.material.map((x) => x.clone()) : m.material.clone()
+          })
+          obj.position.add(localDelta(n.object, delta.clone().multiplyScalar(k)))
+          const parentObj = n.object.parent ?? this.root
+          const copy = this.cloneTree(n, obj, n.parent)
+          copy.name = this.uniqueName(n.name, n.parent)
+          // Right after the original (and earlier copies) in the tree.
+          const siblings = n.parent ? n.parent.children : this.roots
+          siblings.splice(siblings.indexOf(n) + k, 0, copy)
+          parentObj.add(obj)
+          this.recordAdd(copy, `Copy ${n.name}`)
+          made.push(copy)
+        }
+      }
+    })
+    this.selected = new Set(made.map((m) => m.id))
+    this.emit('selection', this.selection())
+    this.emit('changed', undefined)
+    return made
+  }
+
+  /** Selected-style list: drop nodes whose ancestor is also listed. */
+  private topOf(ids: string[]): DocNode[] {
+    const set = new Set(ids)
+    return ids
+      .map((i) => this.nodes.get(i))
+      .filter((n): n is DocNode => {
+        if (!n) return false
+        for (let p = n.parent; p; p = p.parent) if (set.has(p.id)) return false
+        return true
+      })
+  }
+
+  /** Doc nodes for `obj`, a clone of `n.object` (same object structure). Not added to any list. */
+  private cloneTree(n: DocNode, obj: THREE.Object3D, parent: DocNode | null): DocNode {
+    const copy = n.kind === 'body' ? this.makeBody(obj, n.name, null) : this.makeNode(obj, n.name, n.kind, null)
+    copy.parent = parent
+    copy.detail = n.detail
+    copy.source = n.source
+    copy.layers = n.layers
+    copy.props = n.props
+    copy.expanded = n.expanded
+    for (const c of n.children) {
+      const path = pathTo(n.object, c.object)
+      let o: THREE.Object3D | undefined = obj
+      for (const i of path) o = o?.children[i]
+      if (!o) continue
+      copy.children.push(this.cloneTree(c, o, copy))
+    }
+    return copy
+  }
+
+  private uniqueName(base: string, parent: DocNode | null): string {
+    const taken = new Set((parent ? parent.children : this.roots).map((c) => c.name))
+    const stem = base.replace(/ \(\d+\)$/, '')
+    for (let i = 2; ; i++) if (!taken.has(`${stem} (${i})`)) return `${stem} (${i})`
+  }
+
   /** Empty the document (undoable). */
   clear(): void {
     const name = this.name
@@ -523,6 +613,27 @@ function disposeObject(o: THREE.Object3D): void {
     const m = c as THREE.Mesh
     m.geometry?.dispose()
   })
+}
+
+/** `delta` (world space) as a change of `o.position` (its parent's space). */
+function localDelta(o: THREE.Object3D, delta: THREE.Vector3): THREE.Vector3 {
+  const parent = o.parent
+  if (!parent) return delta.clone()
+  parent.updateMatrixWorld(true)
+  const inv = parent.matrixWorld.clone().invert()
+  const a = new THREE.Vector3().applyMatrix4(parent.matrixWorld).applyMatrix4(inv)
+  const b = new THREE.Vector3().applyMatrix4(parent.matrixWorld).add(delta).applyMatrix4(inv)
+  return b.sub(a)
+}
+
+/** Child indices leading from `from` down to `to`. */
+function pathTo(from: THREE.Object3D, to: THREE.Object3D): number[] {
+  const path: number[] = []
+  for (let o: THREE.Object3D | null = to; o && o !== from; o = o.parent) {
+    if (!o.parent) return []
+    path.unshift(o.parent.children.indexOf(o))
+  }
+  return path
 }
 
 function collect(n: DocNode): DocNode[] {

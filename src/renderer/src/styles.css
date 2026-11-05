@@ -238,3 +238,21 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .history-item { grid-template-columns: 1fr; padding-left: 12px; }
 .history-item.undone { color: var(--muted); font-style: italic; }
 .history-now { margin: 3px 6px; padding: 3px 6px; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); color: var(--accent); font-size: 11px; text-align: center; }
+
+/* ---- tool panels (Translate...) ---- */
+.tool-panel { position: absolute; top: 12px; left: 12px; z-index: 5; width: 230px; padding: 10px 12px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 12px; }
+.tool-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.tool-name { font-weight: 600; font-size: 13px; }
+.tool-sub { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tool-grid { display: grid; grid-template-columns: 18px 1fr auto; gap: 6px 8px; align-items: center; }
+.tool-axis { font-weight: 700; }
+.axis-x { color: #ff5a5a; } .axis-y { color: #4cd964; } .axis-z { color: #4a9dff; }
+.tool-panel input[type=number] { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font: inherit; }
+.tool-panel input[type=number]:focus { outline: none; border-color: var(--accent); }
+.tool-panel input:disabled { opacity: .45; }
+.tool-unit { color: var(--muted); }
+.tool-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.tool-row .check { flex: 1; }
+.tool-count { width: 64px !important; }
+.tool-hint { margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.tool-buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }

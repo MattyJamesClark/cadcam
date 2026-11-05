@@ -234,7 +234,7 @@ export class Shell {
       },
       {
         title: 'Edit',
-        items: ['edit.undo', 'edit.redo', 'edit.history', '-', 'edit.select-all', 'edit.rename', '-', 'edit.hide', 'edit.show-all', 'edit.delete']
+        items: ['edit.undo', 'edit.redo', 'edit.history', '-', 'edit.select-all', 'edit.rename', 'edit.translate', '-', 'edit.hide', 'edit.show-all', 'edit.delete']
       },
       {
         title: 'View',

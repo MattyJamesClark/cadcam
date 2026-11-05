@@ -33,6 +33,7 @@
 #include <STEPCAFControl_Writer.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <TopoDS_Compound.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <TopoDS_Shell.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
@@ -228,25 +229,37 @@ val meshVal(const MeshOut& m) {
 
 struct Bodies {
   std::vector<TopoDS_Shape> shapes;
-  bool solid = false;
+  std::vector<bool> solid;
 };
 
-/** Split a shape into bodies: solids, else shells, else everything as one body. */
+/** Split a shape into bodies: each solid, each shell not in a solid, and loose faces / curves as one more. */
 Bodies bodiesOf(const TopoDS_Shape& shape) {
   Bodies b;
-  for (TopAbs_ShapeEnum type : {TopAbs_SOLID, TopAbs_SHELL}) {
-    TopTools_IndexedMapOfShape map;
-    TopExp::MapShapes(shape, type, map);
-    if (map.Extent() > 0) {
-      for (int i = 1; i <= map.Extent(); i++) b.shapes.push_back(map.FindKey(i));
-      b.solid = type == TopAbs_SOLID;
-      return b;
+  BRep_Builder bb;
+  TopoDS_Compound rest;
+  bb.MakeCompound(rest);
+  bool hasRest = false;
+  std::function<void(const TopoDS_Shape&)> walk = [&](const TopoDS_Shape& s) {
+    switch (s.ShapeType()) {
+      case TopAbs_COMPOUND:
+      case TopAbs_COMPSOLID:
+        for (TopoDS_Iterator it(s); it.More(); it.Next()) walk(it.Value());
+        break;
+      case TopAbs_SOLID:
+      case TopAbs_SHELL:
+        b.shapes.push_back(s);
+        b.solid.push_back(s.ShapeType() == TopAbs_SOLID);
+        break;
+      default:
+        bb.Add(rest, s);
+        hasRest = true;
     }
+  };
+  if (!shape.IsNull()) walk(shape);
+  if (hasRest) {
+    b.shapes.push_back(rest);
+    b.solid.push_back(false);
   }
-  TopTools_IndexedMapOfShape faces, edges;
-  TopExp::MapShapes(shape, TopAbs_FACE, faces);
-  TopExp::MapShapes(shape, TopAbs_EDGE, edges);
-  if (faces.Extent() > 0 || edges.Extent() > 0) b.shapes.push_back(shape);
   return b;
 }
 
@@ -382,7 +395,8 @@ class XcafReader {
     if (!info.color) info.color = shapeColor(shape);
     info.layers = layersOf(label);
     Bodies bodies = bodiesOf(shape);
-    for (const TopoDS_Shape& body : bodies.shapes) {
+    for (size_t bi = 0; bi < bodies.shapes.size(); bi++) {
+      const TopoDS_Shape& body = bodies.shapes[bi];
       TDF_Label sub;
       const bool hasSub = shapeTool_->FindSubShape(label, body, sub);
       BodyInfo b;
@@ -393,7 +407,7 @@ class XcafReader {
       MeshOut m = meshBody(body, angle_, defl_, [this](const TopoDS_Face& f) { return shapeColor(f); });
       if (m.index.empty() && m.edges.empty()) continue;
       b.wire = m.index.empty();
-      b.solid = !b.wire && bodies.solid;
+      b.solid = !b.wire && bodies.solid[bi];
       if (b.layers.empty() && (bodies.shapes.size() > 1 || b.wire)) b.layers = shapeLayers(body);
       b.mesh = meshes_["length"].as<int>();
       meshes_.call<void>("push", meshVal(m));
@@ -533,7 +547,8 @@ val readBrep(const std::string& path, double ratio, double angle, Progress progr
   val meshes = val::array();
   val kids = val::array();
   Bodies bodies = bodiesOf(shape);
-  for (const auto& body : bodies.shapes) {
+  for (size_t bi = 0; bi < bodies.shapes.size(); bi++) {
+    const TopoDS_Shape& body = bodies.shapes[bi];
     MeshOut m = meshBody(body, angle, defl, [](const TopoDS_Face&) { return std::optional<RGB>(); });
     if (m.index.empty() && m.edges.empty()) continue;
     val n = val::object();
@@ -541,7 +556,7 @@ val readBrep(const std::string& path, double ratio, double angle, Progress progr
     n.set("kind", "body");
     n.set("mesh", meshes["length"]);
     if (m.index.empty()) n.set("wire", true);
-    else n.set("solid", bodies.solid);
+    else n.set("solid", bool(bodies.solid[bi]));
     n.set("children", val::array());
     meshes.call<void>("push", meshVal(m));
     kids.call<void>("push", n);
@@ -746,7 +761,10 @@ class XcafWriter {
         t = gp_Trsf();
       } else cl = add(child);
       if (cl.IsNull()) continue;
-      shapeTool_->AddComponent(label, cl, TopLoc_Location(t));
+      TDF_Label comp = shapeTool_->AddComponent(label, cl, TopLoc_Location(t));
+      // Instance name too, so other systems (and our reader) show it instead of a number.
+      if (!comp.IsNull() && has(child, "name") && !child["name"].as<std::string>().empty())
+        TDataStd_Name::Set(comp, TCollection_ExtendedString(child["name"].as<std::string>().c_str(), true));
       count++;
     }
     if (!count) {

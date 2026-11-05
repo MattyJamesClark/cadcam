@@ -63,9 +63,11 @@ export class Viewport extends Emitter<ViewportEvents> {
   private bgLight = false
 
   projection: Projection = 'orthographic'
+  /** Set by tools with on-screen handles: true while the pointer is over one (no picking then). */
+  blockPick: (() => boolean) | null = null
   displayMode: DisplayMode = 'shaded-edges'
 
-  constructor(private host: HTMLElement, readonly doc: CadDocument) {
+  constructor(readonly host: HTMLElement, readonly doc: CadDocument) {
     super()
     THREE.Object3D.DEFAULT_UP.set(0, 0, 1)
 
@@ -385,7 +387,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     el.addEventListener('contextmenu', (e) => e.preventDefault())
 
     el.addEventListener('pointerdown', (e) => {
-      if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY }
+      if (e.button === 0) this.downAt = this.blockPick?.() ? null : { x: e.clientX, y: e.clientY }
     })
 
     el.addEventListener('pointerup', (e) => {

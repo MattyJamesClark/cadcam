@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { openTranslate } from '@/core/translate'
 import { importerFor, listExporters, listImporters, loadFile, partMaterial, unsupportedReason } from '@/core/io'
 import { icons } from '@/core/icons'
 import type { CadModule, ModuleContext } from '@/core/types'
@@ -353,6 +354,15 @@ export const homeModule: CadModule = {
           shortcut: 'Shift+H',
           isEnabled: (ctx) => ctx.doc.all().some((n) => !n.object.visible),
           run: (ctx) => ctx.doc.showAll()
+        },
+        {
+          id: 'edit.translate',
+          label: 'Translate',
+          icon: icons.move,
+          shortcut: 'T',
+          tooltip: 'Move or copy the selection by a distance (on-screen handle or typed values)',
+          isEnabled: (ctx) => ctx.doc.selection().length > 0,
+          run: (ctx) => openTranslate(ctx)
         },
         {
           id: 'edit.delete',
