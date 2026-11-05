@@ -73,10 +73,12 @@ export class Viewport extends Emitter<ViewportEvents> {
     super()
     THREE.Object3D.DEFAULT_UP.set(0, 0, 1)
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    // Opaque canvas with the background gradient drawn by WebGL itself: a
+    // see-through canvas over a CSS background has to be blended by the
+    // browser every frame, which can tear while orbiting on some GPUs.
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, premultipliedAlpha: false, powerPreference: 'high-performance' })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
-    this.renderer.setClearColor(0x000000, 0)
     host.appendChild(this.renderer.domElement)
     this.renderer.domElement.classList.add('viewport-canvas')
 
@@ -184,12 +186,30 @@ export class Viewport extends Emitter<ViewportEvents> {
 
   // ---- settings & theme --------------------------------------------------
 
+  private bgTexture: THREE.CanvasTexture | null = null
+  private setBackground(top: string, bottom: string): void {
+    const c = document.createElement('canvas')
+    c.width = 2
+    c.height = 512
+    const g = c.getContext('2d')!
+    const grad = g.createLinearGradient(0, 0, 0, c.height)
+    grad.addColorStop(0, top)
+    grad.addColorStop(1, bottom)
+    g.fillStyle = grad
+    g.fillRect(0, 0, c.width, c.height)
+    this.bgTexture?.dispose()
+    this.bgTexture = new THREE.CanvasTexture(c)
+    this.bgTexture.colorSpace = THREE.SRGBColorSpace
+    this.scene.background = this.bgTexture
+  }
+
   private applySettings(s: Settings): void {
     const dark = effectiveTheme(s) === 'dark'
     const top = s.viewportTop ?? (dark ? '#3b4350' : '#e8edf3')
     const bottom = s.viewportBottom ?? (dark ? '#1c2026' : '#c3ccd6')
     this.host.style.setProperty('--vp-top', top)
     this.host.style.setProperty('--vp-bottom', bottom)
+    this.setBackground(top, bottom)
     // Grid contrasts with the background, not with the UI theme.
     const lum = (new THREE.Color(top).getHSL({ h: 0, s: 0, l: 0 }).l + new THREE.Color(bottom).getHSL({ h: 0, s: 0, l: 0 }).l) / 2
     this.bgLight = lum > 0.55
