@@ -51,6 +51,8 @@ export interface WorkPlane {
   name: string
   matrix: number[]
   visible: boolean
+  /** Temporary (not saved with the project) until the user keeps it. */
+  temp?: boolean
 }
 
 type V3 = [number, number, number]

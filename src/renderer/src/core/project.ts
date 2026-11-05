@@ -209,7 +209,7 @@ export function saveProject(doc: CadDocument, appVersion?: string): Uint8Array {
     tagged.forEach((o) => delete o.userData.__node)
   }
 
-  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson, dims: doc.dims, planes: doc.planes }
+  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson, dims: doc.dims, planes: doc.planes.filter((p) => !p.temp) }
   const text = new TextEncoder().encode(JSON.stringify(json))
   const jsonLen = text.byteLength + ((4 - (text.byteLength % 4)) % 4)
   const out = new Uint8Array(8 + jsonLen + size)

@@ -1,3 +1,4 @@
+import { showCmdBar } from './cmdbar'
 import * as THREE from 'three'
 import type { ModuleContext } from './types'
 import type { Dimension } from './document'
@@ -114,6 +115,12 @@ class DimensionTool {
     }
     window.addEventListener('keydown', onKey, true)
     this.off.push(() => window.removeEventListener('keydown', onKey, true))
+    const bar = showCmdBar(vp.host, {
+      ok: () => this.close(),
+      cancel: () => this.close(),
+      back: () => this.setPicks(this.picks.slice(0, -1))
+    })
+    this.off.push(() => bar.dispose())
   }
 
   /** What a click can pick, for this kind of dimension. */

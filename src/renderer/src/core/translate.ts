@@ -1,4 +1,5 @@
 import { isPickingPoints, pointMoveButtons } from './pointpick'
+import { showCmdBar } from './cmdbar'
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import type { ModuleContext } from './types'
@@ -81,6 +82,8 @@ class TranslateTool {
 
     this.panel = this.buildPanel()
     vp.host.appendChild(this.panel)
+    const bar = showCmdBar(vp.host, { ok: () => this.ok(), cancel: () => this.cancel() })
+    this.off.push(() => bar.dispose())
     const onKey = (e: KeyboardEvent): void => {
       if (isPickingPoints()) return
       if (e.key === 'Escape') this.cancel()

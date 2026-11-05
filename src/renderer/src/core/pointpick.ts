@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { ModuleContext } from './types'
 import { Highlights, pickAt, pickKey, type Pick } from './picking'
 import { el } from './toolpanel'
+import { showCmdBar } from './cmdbar'
 
 /**
  * Ask for a few points in the view, one prompt per point (bottom of the
@@ -46,6 +47,7 @@ export function pickPoints(ctx: ModuleContext, title: string, steps: string[]): 
       canvas.removeEventListener('pointerup', onUp, true)
       canvas.removeEventListener('pointermove', onMove)
       window.removeEventListener('keydown', onKey, true)
+      bar.dispose()
       hl.dispose()
       prompt.remove()
       vp.blockPick = prevBlock
@@ -92,6 +94,15 @@ export function pickPoints(ctx: ModuleContext, title: string, steps: string[]): 
       e.stopImmediatePropagation()
       finish(null)
     }
+    const bar = showCmdBar(vp.host, {
+      cancel: () => finish(null),
+      back: () => {
+        if (!got.length) return finish(null)
+        got.pop()
+        draw()
+        say()
+      }
+    })
     canvas.addEventListener('pointerdown', onDown, true)
     canvas.addEventListener('pointerup', onUp, true)
     canvas.addEventListener('pointermove', onMove)

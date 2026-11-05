@@ -5,9 +5,10 @@ import type { WorkPlane } from './document'
 import { datums } from './datums'
 import { icons } from './icons'
 import { measureCad } from './occt'
-import { Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
+import { fitCircle, Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
 import { addBottomButton } from './bottombar'
 import { isPickingPoints, pickPoints } from './pointpick'
+import { showCmdBar } from './cmdbar'
 import { el, fmt, toolPanel } from './toolpanel'
 
 /**
@@ -143,6 +144,8 @@ class PlaneManager {
     make('3 points', 'New plane: click the origin, a point along X, then a point in the plane', () => this.startTool(new ThreePointTool(this.ctx)))
     make('Face', 'New plane on a flat face, origin at its bottom-left corner', () => this.startTool(new FaceTool(this.ctx)))
     make('Origin', 'New plane at a clicked point, lined up with the active plane', () => this.startTool(new OriginTool(this.ctx)))
+    make('Element', 'New plane from an edge: a circle or arc gives its centre and axis; a line gives its end and direction', () => this.startTool(new ElementTool(this.ctx)))
+    make('Box', "New plane at the bottom corner of a body's bounding box (in the active plane)", () => this.startTool(new BoxTool(this.ctx)))
     this.list = el('div', 'plane-list')
     body.append(add, this.list, el('div', 'tool-empty plane-hint', 'Click a plane to make it active.'))
     this.ctx.viewport.host.append(panel)
@@ -188,6 +191,10 @@ class PlaneManager {
       const row = el('div', 'plane-row')
       activeRow(p.id, row)
       const name = el('span', 'plane-name', p.name)
+      if (p.temp) {
+        row.classList.add('temp')
+        name.title = 'Temporary: not saved with the project. Click the pin to keep it.'
+      }
       name.title = 'Double-click to rename'
       name.addEventListener('dblclick', () => {
         const n = prompt('Plane name', p.name)?.trim()
@@ -202,6 +209,7 @@ class PlaneManager {
       }
       row.append(
         name,
+        ...(p.temp ? [btn(icons.pin, 'Keep: save this plane with the project', () => this.ctx.doc.updatePlane(p.id, { temp: false }, 'Keep plane'))] : []),
         btn(p.visible ? icons.eye : icons.eyeOff, p.visible ? 'Hide' : 'Show', () =>
           this.ctx.doc.updatePlane(p.id, { visible: !p.visible }, p.visible ? 'Hide plane' : 'Show plane')
         ),
@@ -260,7 +268,8 @@ const nextName = (ctx: ModuleContext): string => {
 
 /** Add a plane and make it the active one (as VISI does). */
 function newPlane(ctx: ModuleContext, m: THREE.Matrix4): void {
-  const p = ctx.doc.addPlane({ name: nextName(ctx), matrix: m.toArray(), visible: true })
+  // New planes start temporary (VISI): pin one to save it with the project.
+  const p = ctx.doc.addPlane({ name: nextName(ctx), matrix: m.toArray(), visible: true, temp: true })
   mgr?.setActive(p.id)
 }
 
@@ -313,6 +322,16 @@ abstract class PickTool {
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointermove', onMove)
     window.addEventListener('keydown', onKey, true)
+    const bar = showCmdBar(vp.host, {
+      cancel: () => this.close(),
+      back: () => {
+        if (!this.picks.length) return this.close()
+        this.picks.pop()
+        this.draw()
+        this.restep()
+      }
+    })
+    this.off.push(() => bar.dispose())
     this.off.push(() => {
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointerup', onUp)
@@ -336,6 +355,8 @@ abstract class PickTool {
   }
 
   protected abstract pick(p: Pick): Promise<void>
+  /** Re-show the prompt for the current step (after Back). */
+  protected restep(): void {}
 
   close(): void {
     this.off.forEach((f) => f())
@@ -355,6 +376,10 @@ class ThreePointTool extends PickTool {
   constructor(ctx: ModuleContext) {
     super(ctx)
     this.say('Plane by 3 points', this.steps[0])
+  }
+
+  protected restep(): void {
+    this.say('Plane by 3 points', this.steps[this.picks.length])
   }
 
   protected async pick(p: Pick): Promise<void> {
@@ -439,6 +464,84 @@ class OriginTool extends PickTool {
     newPlane(this.ctx, m)
     this.close()
   }
+}
+
+/** New plane from an edge: circle / arc → centre, Z along its axis; line → the nearer end, X along it. */
+class ElementTool extends PickTool {
+  protected filter = { edge: true }
+
+  constructor(ctx: ModuleContext) {
+    super(ctx)
+    this.say('Plane on element', 'select an edge (circle, arc or line)')
+  }
+
+  protected async pick(p: Pick): Promise<void> {
+    const pts = edgePoints(p)
+    if (pts.length < 2) return
+    const work = this.ctx.viewport.workplane
+    const wz = new THREE.Vector3(0, 0, 1).transformDirection(work)
+    const wx = new THREE.Vector3(1, 0, 0).transformDirection(work)
+    const circle = pts.length > 2 ? fitCircle(pts) : null
+    let m: THREE.Matrix4
+    if (circle) {
+      const n = circle.n.clone()
+      if (n.dot(wz) < 0) n.negate()
+      const ref = Math.abs(wx.dot(n)) > 0.9 ? new THREE.Vector3(0, 1, 0).transformDirection(work) : wx
+      m = frame(circle.c, ref.clone().sub(n.clone().multiplyScalar(ref.dot(n))), n)
+    } else {
+      const a = pts[0]
+      const b = pts[pts.length - 1]
+      const [o, e] = a.distanceTo(p.point) <= b.distanceTo(p.point) ? [a, b] : [b, a]
+      const x = e.clone().sub(o)
+      let z = wz.clone()
+      if (Math.abs(z.dot(x.clone().normalize())) > 0.99) z = new THREE.Vector3(0, 1, 0).transformDirection(work)
+      m = frame(o, x, z)
+    }
+    newPlane(this.ctx, m)
+    this.close()
+  }
+}
+
+/** New plane at the lowest corner of a body's box, measured in the active plane. */
+class BoxTool extends PickTool {
+  protected filter = { face: true, edge: true }
+
+  constructor(ctx: ModuleContext) {
+    super(ctx)
+    this.say('Plane on bounding box', 'select a body')
+  }
+
+  protected async pick(p: Pick): Promise<void> {
+    const work = this.ctx.viewport.workplane.clone()
+    const inv = work.clone().invert()
+    const geo = (p.object as THREE.Mesh).geometry as THREE.BufferGeometry
+    const pos = geo.getAttribute('position')
+    p.object.updateMatrixWorld()
+    const toLocal = inv.clone().multiply(p.object.matrixWorld)
+    const box = new THREE.Box3()
+    const v = new THREE.Vector3()
+    for (let i = 0; i < pos.count; i++) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(toLocal))
+    if (box.isEmpty()) return
+    newPlane(this.ctx, work.clone().setPosition(box.min.clone().applyMatrix4(work)))
+    this.close()
+  }
+}
+
+/** World points along the picked edge's polyline. */
+function edgePoints(p: Pick): THREE.Vector3[] {
+  const geo = (p.object as THREE.Mesh).geometry
+  const segs = geo.userData.edgePositions as Float32Array | undefined
+  const ranges = geo.userData.edgeRanges as Uint32Array | undefined
+  if (!segs || !ranges || p.index < 0 || p.index * 2 >= ranges.length) return []
+  const first = ranges[p.index * 2]
+  const count = ranges[p.index * 2 + 1]
+  if (!count) return []
+  p.object.updateMatrixWorld()
+  const m = p.object.matrixWorld
+  const at = (i: number): THREE.Vector3 => new THREE.Vector3(segs[i], segs[i + 1], segs[i + 2]).applyMatrix4(m)
+  const out = [at(first * 6)]
+  for (let j = 0; j < count; j++) out.push(at((first + j) * 6 + 3))
+  return out
 }
 
 /** World positions of the triangles of the picked face. */
@@ -572,16 +675,26 @@ class EditTool {
         )
       )
     )
-    const reset = icon(icons.selPrev, 'Undo these changes (back to where it started)', () => {
-      this.start.decompose(this.proxy.position, this.proxy.quaternion, this.proxy.scale)
-      this.update()
-    })
-    const ok = el('button', 'btn primary vs-text', 'OK')
-    ok.addEventListener('click', () => this.ok())
-    const cancel = el('button', 'btn vs-text', 'Cancel')
-    cancel.addEventListener('click', () => this.cancel())
     const sep = (): HTMLElement => el('span', 'vs-sep')
-    strip.append(mMove, mRot, sep(), p2p, mid, org, sep(), inc, rot, sep(), this.readout, reset, cancel, ok)
+    // Direction options: quarter turns about the plane's own axes, or flip Z.
+    const turn = (label: string, title: string, ax: THREE.Vector3, deg: number): HTMLButtonElement => {
+      const b = el('button', 'btn vs-text vs-dir', label)
+      b.title = title
+      b.addEventListener('click', () => {
+        this.proxy.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(ax, THREE.MathUtils.degToRad(deg)))
+        this.update()
+      })
+      return b
+    }
+    const dirs = el('div', 'vs-group')
+    dirs.append(
+      el('span', 'vs-label', 'Direction'),
+      turn('X 90°', "Turn 90° about the plane's X axis", axis(0), 90),
+      turn('Y 90°', "Turn 90° about the plane's Y axis", axis(1), 90),
+      turn('Z 90°', "Turn 90° about the plane's Z axis", axis(2), 90),
+      turn('Flip', 'Flip the plane over (Z points the other way)', axis(0), 180)
+    )
+    strip.append(mMove, mRot, sep(), p2p, mid, org, sep(), dirs, sep(), inc, rot, sep(), this.readout)
     vp.host.append(strip)
 
     const onKey = (e: KeyboardEvent): void => {
@@ -597,6 +710,15 @@ class EditTool {
     }
     window.addEventListener('keydown', onKey, true)
     this.off.push(() => window.removeEventListener('keydown', onKey, true))
+    const bar = showCmdBar(vp.host, {
+      ok: () => this.ok(),
+      cancel: () => this.cancel(),
+      back: () => {
+        this.start.decompose(this.proxy.position, this.proxy.quaternion, this.proxy.scale)
+        this.update()
+      }
+    })
+    this.off.push(() => bar.dispose())
     this.update()
   }
 

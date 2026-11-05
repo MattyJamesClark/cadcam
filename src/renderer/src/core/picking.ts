@@ -351,7 +351,7 @@ export function snapPoints(geo: THREE.BufferGeometry): { points: Float32Array; k
 }
 
 /** Is this polyline a circle or an arc? Centre, axis, radius, and whether it closes. */
-function fitCircle(pts: THREE.Vector3[]): { c: THREE.Vector3; n: THREE.Vector3; r: number; closed: boolean } | null {
+export function fitCircle(pts: THREE.Vector3[]): { c: THREE.Vector3; n: THREE.Vector3; r: number; closed: boolean } | null {
   const last = pts[pts.length - 1]
   const len = pts.reduce((s, p, i) => (i ? s + p.distanceTo(pts[i - 1]) : 0), 0)
   if (len <= 0) return null
