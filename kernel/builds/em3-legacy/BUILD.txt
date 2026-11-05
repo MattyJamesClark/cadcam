@@ -1,0 +1,1 @@
+em3-legacy, link -O3, O1 files: extra/ShapeCustom_BSplineRestriction.o extra/ShapeUpgrade_ShapeDivide.o 
