@@ -329,3 +329,4 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .plane-btn svg { width: 15px; height: 15px; }
 .plane-tag { position: absolute; transform: translate(-50%, -50%); font-size: 11px; color: #bfdbfe; background: rgba(15, 23, 42, .7); padding: 0 5px; border-radius: 3px; pointer-events: none; white-space: nowrap; z-index: 2; }
 .plane-edit .tool-grid { grid-template-columns: 18px 1fr; } .plane-edit .seg { margin-bottom: 4px; }
+.tool-pick-row { display: flex; gap: 6px; margin: 6px 0 8px; } .tool-pick-row .btn { flex: 1; padding-left: 4px; padding-right: 4px; }

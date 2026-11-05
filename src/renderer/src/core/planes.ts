@@ -7,6 +7,7 @@ import { icons } from './icons'
 import { measureCad } from './occt'
 import { Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
 import { addBottomButton } from './bottombar'
+import { isPickingPoints, pointMoveButtons } from './pointpick'
 import { el, fmt, toolPanel } from './toolpanel'
 
 /**
@@ -140,7 +141,8 @@ class PlaneManager {
     if (!list) return
     list.replaceChildren()
     const world = el('div', 'plane-row fixed')
-    world.append(el('span', 'plane-name', 'World (XY)'))
+    world.append(el('span', 'plane-name', 'Absolute'))
+    world.title = 'The absolute origin and XY plane'
     list.append(world)
     for (const p of this.ctx.doc.planes) {
       const row = el('div', 'plane-row')
@@ -433,7 +435,18 @@ class EditTool {
       })
       mode.append(b)
     }
-    body.append(mode, el('div', 'tool-section', 'Origin (world)'))
+    body.append(
+      mode,
+      pointMoveButtons(
+        ctx,
+        () => {},
+        (d) => {
+          this.proxy.position.add(d)
+          this.update()
+        }
+      ),
+      el('div', 'tool-section', 'Origin (absolute)')
+    )
     const grid = el('div', 'tool-grid')
     ;(['X', 'Y', 'Z'] as const).forEach((axis, i) => {
       const label = el('label', `tool-axis axis-${axis.toLowerCase()}`, axis)
@@ -479,6 +492,7 @@ class EditTool {
     vp.host.append(panel)
 
     const onKey = (e: KeyboardEvent): void => {
+      if (isPickingPoints()) return
       if (e.key === 'Escape') this.cancel()
       else if (e.key === 'Enter' && !(e.target as HTMLElement).closest('.rot-grid')) this.ok()
       else return

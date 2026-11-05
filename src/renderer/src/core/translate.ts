@@ -1,3 +1,4 @@
+import { isPickingPoints, pointMoveButtons } from './pointpick'
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import type { ModuleContext } from './types'
@@ -81,6 +82,7 @@ class TranslateTool {
     this.panel = this.buildPanel()
     vp.host.appendChild(this.panel)
     const onKey = (e: KeyboardEvent): void => {
+      if (isPickingPoints()) return
       if (e.key === 'Escape') this.cancel()
       else if (e.key === 'Enter') this.ok()
       else return
@@ -141,6 +143,19 @@ class TranslateTool {
       this.inputs.push(input)
       grid.append(label, input, el('span', 'tool-unit', 'mm'))
     })
+    panel.append(
+      pointMoveButtons(
+        this.ctx,
+        () => {
+          this.delta.set(0, 0, 0)
+          this.preview()
+        },
+        (d) => {
+          this.delta.copy(d)
+          this.preview()
+        }
+      )
+    )
     panel.append(grid)
 
     const copyRow = el('div', 'tool-row')
@@ -173,7 +188,7 @@ class TranslateTool {
     copyRow.append(copyLabel, this.countBox, countLabel)
     panel.append(copyRow)
 
-    panel.append(el('div', 'tool-hint', 'Drag the arrows or type distances. Enter = OK, Esc = cancel.'))
+    panel.append(el('div', 'tool-hint', 'Drag the arrows, type distances, or pick points. Enter = OK, Esc = cancel.'))
     const buttons = el('div', 'tool-buttons')
     const cancel = el('button', 'btn', 'Cancel')
     const ok = el('button', 'btn primary', 'OK')

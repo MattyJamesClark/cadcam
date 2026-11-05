@@ -13,7 +13,7 @@ export interface Datum {
 }
 
 class Datums extends Emitter<{ changed: void }> {
-  private items: Datum[] = [{ id: 'world', name: 'World origin', matrix: new THREE.Matrix4() }]
+  private items: Datum[] = [{ id: 'world', name: 'Absolute', matrix: new THREE.Matrix4() }]
 
   list(): readonly Datum[] {
     return this.items
