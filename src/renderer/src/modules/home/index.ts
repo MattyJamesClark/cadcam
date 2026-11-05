@@ -58,7 +58,8 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
       continue
     }
     const base = f.name.replace(/\.[^.]+$/, '')
-    ctx.doc.add(obj, { name: base, kind: imp.name, source: f.name })
+    const node = ctx.doc.addFile(obj, { name: base, format: imp.name, source: f.name })
+    if (ctx.doc.bodies(node).length > 1) node.expanded = true
     ok++
     console.info(`Imported ${f.name} in ${(performance.now() - t0).toFixed(0)} ms`)
   }
@@ -72,11 +73,16 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
 
 async function exportAs(ctx: ModuleContext, ext: string): Promise<void> {
   const exp = listExporters().find((e) => e.extension === ext)!
-  const items = ctx.doc.selection().length
-    ? ctx.doc.selection().map((id) => ctx.doc.get(id)!)
-    : ctx.doc.all().filter((i) => i.visible)
+  const items = ctx.doc.selection().length ? ctx.doc.selectedTopNodes() : ctx.doc.roots.filter((n) => ctx.doc.isShown(n))
   const group = new THREE.Group()
-  for (const i of items) group.add(i.object.clone(true))
+  ctx.doc.root.updateMatrixWorld(true)
+  for (const n of items) {
+    // Bake each node's placement in the file (axis/unit conversion, assembly position).
+    const copy = n.object.clone(true)
+    copy.visible = true
+    n.object.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
+    group.add(copy)
+  }
   const bytes = await exp.write(group)
   const name = `${ctx.doc.name.replace(/\.[^.]+$/, '') || 'export'}.${ext}`
   const host = window.host
@@ -100,11 +106,11 @@ function addPrimitive(ctx: ModuleContext, kind: string, geo: THREE.BufferGeometr
   const x = existing.isEmpty() ? 0 : existing.max.x + 20 - geo.boundingBox!.min.x
   geo.translate(x, 0, z)
   const mesh = new THREE.Mesh(geo, partMaterial())
-  ctx.doc.add(mesh, { name: `${kind} ${++counter}`, kind })
+  ctx.doc.addBody(mesh, `${kind} ${++counter}`, kind)
   ctx.viewport.fitAll()
 }
 
-const hasItems = (ctx: ModuleContext): boolean => ctx.doc.all().length > 0
+const hasItems = (ctx: ModuleContext): boolean => !ctx.doc.isEmpty()
 
 export const homeModule: CadModule = {
   id: 'home',
@@ -186,7 +192,7 @@ export const homeModule: CadModule = {
           shortcut: 'Delete',
           tooltip: 'Delete selected items',
           isEnabled: (ctx) => ctx.doc.selection().length > 0,
-          run: (ctx) => ctx.doc.selection().forEach((id) => ctx.doc.remove(id))
+          run: (ctx) => ctx.doc.selectedTopNodes().forEach((n) => ctx.doc.remove(n.id))
         }
       ]
     }

@@ -2,12 +2,13 @@ import * as THREE from 'three'
 import { CadDocument } from './document'
 import { Emitter } from './events'
 import { CadNavigation } from './navigation'
+import { featureEdges } from './edges'
 import { effectiveTheme, settings, type Settings } from './settings'
 import { AxisTriad } from './triad'
 import { ViewCube } from './viewcube'
 
 export type Projection = 'perspective' | 'orthographic'
-export type DisplayMode = 'shaded' | 'shaded-edges' | 'wireframe'
+export type DisplayMode = 'shaded' | 'shaded-edges' | 'hidden-removed' | 'wireframe'
 export type StandardView = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'iso'
 
 /** Direction from target to camera for each standard view (Z up). */
@@ -52,6 +53,7 @@ export class Viewport extends Emitter<ViewportEvents> {
   private ndc = new THREE.Vector2()
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
   private downAt: { x: number; y: number } | null = null
+  private bgLight = false
 
   projection: Projection = 'perspective'
   displayMode: DisplayMode = 'shaded-edges'
@@ -177,6 +179,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.host.style.setProperty('--vp-bottom', bottom)
     // Grid contrasts with the background, not with the UI theme.
     const lum = (new THREE.Color(top).getHSL({ h: 0, s: 0, l: 0 }).l + new THREE.Color(bottom).getHSL({ h: 0, s: 0, l: 0 }).l) / 2
+    this.bgLight = lum > 0.55
     this.grid.userData.setColor(lum > 0.55 ? 0x3d4651 : 0xaab4c0, lum > 0.55 ? 0.8 : 1)
     SELECT_COLOR.set(s.accent)
     this.viewCube.setVisible(s.showViewCube)
@@ -242,11 +245,7 @@ export class Viewport extends Emitter<ViewportEvents> {
   }
 
   fitSelection(): void {
-    const box = new THREE.Box3()
-    for (const id of this.doc.selection()) {
-      const item = this.doc.get(id)
-      if (item) box.expandByObject(item.object)
-    }
+    const box = this.doc.bounds(this.doc.selectedTopNodes())
     if (box.isEmpty()) return this.fitAll()
     this.fitBox(box, true)
   }
@@ -265,44 +264,57 @@ export class Viewport extends Emitter<ViewportEvents> {
 
   // ---- display & selection ----------------------------------------------
 
+  /**
+   * Display modes, as in most CAD packages:
+   *  shaded          surfaces only
+   *  shaded-edges    surfaces + model edges
+   *  hidden-removed  model edges only, back edges hidden (surfaces drawn into depth only)
+   *  wireframe       model edges only, see-through
+   */
   private applyDisplayMode(): void {
-    const wire = this.displayMode === 'wireframe'
-    const edges = this.displayMode !== 'shaded'
+    const mode = this.displayMode
+    const showEdges = mode !== 'shaded'
+    const surfaces = mode === 'shaded' || mode === 'shaded-edges'
     this.doc.root.traverse((o) => {
       const mesh = o as THREE.Mesh
       if (!mesh.isMesh || o.name === EDGE_TAG) return
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      for (const m of mats) {
-        const sm = m as THREE.MeshStandardMaterial
-        if ('wireframe' in sm) sm.wireframe = wire
-        sm.polygonOffset = true
-        sm.polygonOffsetFactor = 1
-        sm.polygonOffsetUnits = 1
+      for (const m of materialsOf(mesh)) {
+        m.wireframe = false
+        m.visible = mode !== 'wireframe' // still pickable: raycasting ignores material visibility
+        m.colorWrite = surfaces
+        m.polygonOffset = true
+        m.polygonOffsetFactor = 1
+        m.polygonOffsetUnits = 1
       }
       let edgeObj = mesh.children.find((c) => c.name === EDGE_TAG) as THREE.LineSegments | undefined
-      if (edges && !wire && !edgeObj) {
-        edgeObj = new THREE.LineSegments(
-          new THREE.EdgesGeometry(mesh.geometry, 25),
-          new THREE.LineBasicMaterial({ color: 0x15181c })
-        )
+      if (showEdges && !edgeObj) {
+        edgeObj = new THREE.LineSegments(featureEdges(mesh), new THREE.LineBasicMaterial())
         edgeObj.name = EDGE_TAG
         edgeObj.userData.docId = mesh.userData.docId
         edgeObj.raycast = () => {}
         mesh.add(edgeObj)
       }
-      if (edgeObj) edgeObj.visible = edges && !wire
+      if (edgeObj) edgeObj.visible = showEdges
     })
+    this.applySelection()
   }
 
   private applySelection(): void {
-    const sel = new Set(this.doc.selection())
+    // Edge colour: dark on shaded parts; contrasting with the background when
+    // the edges are all you see.
+    const linesOnly = this.displayMode === 'wireframe' || this.displayMode === 'hidden-removed'
+    const edgeColor = new THREE.Color(linesOnly ? (this.bgLight ? 0x1d232b : 0xdfe5ec) : 0x15181c)
     this.doc.root.traverse((o) => {
       const mesh = o as THREE.Mesh
-      if (!mesh.isMesh || o.name === EDGE_TAG) return
-      const on = sel.has(mesh.userData.docId)
-      const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]
-      for (const m of mats) {
-        if (!m || !('emissive' in m)) continue
+      if (o.name === EDGE_TAG) {
+        const on = this.doc.isSelected(o.userData.docId)
+        ;((o as THREE.LineSegments).material as THREE.LineBasicMaterial).color.copy(on ? SELECT_COLOR : edgeColor)
+        return
+      }
+      if (!mesh.isMesh) return
+      const on = this.doc.isSelected(mesh.userData.docId)
+      for (const m of materialsOf(mesh)) {
+        if (!('emissive' in m)) continue
         m.emissive.copy(on ? SELECT_COLOR : new THREE.Color(0))
         m.emissiveIntensity = on ? 0.45 : 0
       }
@@ -364,6 +376,10 @@ export class Viewport extends Emitter<ViewportEvents> {
     const r = this.renderer.domElement.getBoundingClientRect()
     this.ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
   }
+}
+
+function materialsOf(mesh: THREE.Mesh): THREE.MeshStandardMaterial[] {
+  return (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]
 }
 
 function isVisible(o: THREE.Object3D): boolean {

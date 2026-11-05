@@ -1,4 +1,4 @@
-import { CadDocument } from './document'
+import { CadDocument, type DocNode } from './document'
 import { icons } from './icons'
 import type { CadModule, Command, ModuleContext, StatusKind } from './types'
 import { Viewport } from './viewport'
@@ -194,32 +194,51 @@ export class Shell {
     const render = (): void => {
       const tree = this.els.tree
       tree.innerHTML = ''
-      const items = this.doc.all()
       this.els.docName.textContent = this.doc.name
-      if (!items.length) {
+      if (this.doc.isEmpty()) {
         tree.append(h('li', 'tree-empty', 'Nothing here yet. Import a file or add a shape from the Home tab.'))
         return
       }
       const sel = new Set(this.doc.selection())
-      for (const item of items) {
-        const li = h('li', 'tree-item')
-        li.classList.toggle('selected', sel.has(item.id))
-        li.classList.toggle('hidden-item', !item.visible)
-        const eye = h('button', 'tree-eye', item.visible ? icons.eye : icons.eyeOff)
-        eye.title = item.visible ? 'Hide' : 'Show'
+      const row = (n: DocNode, depth: number): void => {
+        const li = h('li', `tree-item kind-${n.kind}`)
+        li.style.setProperty('--depth', String(depth))
+        li.classList.toggle('selected', sel.has(n.id))
+        li.classList.toggle('hidden-item', !this.doc.isShown(n))
+        const twisty = h('button', 'tree-twisty', n.children.length ? icons.chevron : '')
+        if (n.children.length) {
+          twisty.classList.toggle('open', n.expanded)
+          twisty.title = n.expanded ? 'Collapse' : 'Expand'
+          twisty.addEventListener('click', (e) => {
+            e.stopPropagation()
+            this.doc.setExpanded(n.id, !n.expanded)
+          })
+        } else twisty.disabled = true
+        const kindIcon = h('span', 'tree-icon', n.kind === 'file' ? icons.file : n.kind === 'assembly' ? icons.assembly : icons.box)
+        const label = h('span', 'tree-label')
+        label.textContent = n.name
+        label.title = n.source ?? n.name
+        const kind = h('span', 'tree-kind')
+        const bodies = n.kind === 'body' ? 0 : this.doc.bodies(n).length
+        kind.textContent = n.kind === 'body' ? (n.detail ?? '') : [n.detail, `${bodies} ${bodies === 1 ? 'body' : 'bodies'}`].filter(Boolean).join(' · ')
+        const visible = n.object.visible
+        const eye = h('button', 'tree-eye', visible ? icons.eye : icons.eyeOff)
+        eye.title = visible ? 'Hide' : 'Show'
         eye.addEventListener('click', (e) => {
           e.stopPropagation()
-          this.doc.setVisible(item.id, !item.visible)
+          this.doc.setVisible(n.id, !visible)
         })
-        const label = h('span', 'tree-label')
-        label.textContent = item.name
-        const kind = h('span', 'tree-kind')
-        kind.textContent = item.kind
-        li.append(eye, label, kind)
-        li.addEventListener('click', (e) => this.doc.select([item.id], e.ctrlKey || e.shiftKey))
-        li.addEventListener('dblclick', () => this.renameInline(label, item.id))
+        li.append(twisty, kindIcon, label, kind, eye)
+        li.addEventListener('click', (e) => this.doc.select([n.id], e.ctrlKey || e.shiftKey))
+        li.addEventListener('dblclick', (e) => {
+          if ((e.target as HTMLElement).closest('button')) return
+          this.renameInline(label, n.id)
+        })
         tree.append(li)
+        if (n.expanded) n.children.forEach((c) => row(c, depth + 1))
       }
+      this.doc.roots.forEach((r) => row(r, 0))
+      tree.querySelector('.selected')?.scrollIntoView({ block: 'nearest' })
     }
     this.doc.on('changed', () => {
       render()

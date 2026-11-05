@@ -65,7 +65,8 @@ export async function readCadFile(format: 'step' | 'iges' | 'brep', data: ArrayB
 }
 
 function buildScene(res: OcctResult): THREE.Object3D {
-  const materials = new Map<string, THREE.MeshStandardMaterial>()
+  // Materials are shared within a body only, so selecting one body never tints another.
+  let materials = new Map<string, THREE.MeshStandardMaterial>()
   const mat = (c: [number, number, number] | null | undefined): THREE.MeshStandardMaterial => {
     const key = c ? c.map((v) => v.toFixed(3)).join(',') : 'default'
     let m = materials.get(key)
@@ -83,6 +84,7 @@ function buildScene(res: OcctResult): THREE.Object3D {
   }
 
   const meshes = res.meshes.map((src, i) => {
+    materials = new Map()
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(src.attributes.position.array, 3))
     if (src.attributes.normal) geo.setAttribute('normal', new THREE.BufferAttribute(src.attributes.normal.array, 3))
@@ -122,11 +124,17 @@ function buildScene(res: OcctResult): THREE.Object3D {
     const g = new THREE.Group()
     g.name = node.name || ''
     for (const i of node.meshes) {
-      g.add(used.has(i) ? meshes[i].clone() : meshes[i])
+      g.add(used.has(i) ? cloneBody(meshes[i]) : meshes[i])
       used.add(i)
     }
     for (const c of node.children) g.add(build(c))
     return g
   }
   return build(res.root)
+}
+
+function cloneBody(m: THREE.Mesh): THREE.Mesh {
+  const c = m.clone()
+  c.material = Array.isArray(m.material) ? m.material.map((x) => x.clone()) : m.material.clone()
+  return c
 }

@@ -79,9 +79,18 @@ export const viewModule: CadModule = {
           run: (ctx) => ctx.viewport.setDisplayMode('shaded-edges')
         },
         {
+          id: 'view.hidden-removed',
+          label: 'Hidden lines removed',
+          icon: icons.hlr,
+          tooltip: 'Edges only, with lines behind faces hidden',
+          isActive: (ctx) => ctx.viewport.displayMode === 'hidden-removed',
+          run: (ctx) => ctx.viewport.setDisplayMode('hidden-removed')
+        },
+        {
           id: 'view.wireframe',
           label: 'Wireframe',
           icon: icons.wire,
+          tooltip: 'See-through: all model edges, no surfaces',
           isActive: (ctx) => ctx.viewport.displayMode === 'wireframe',
           run: (ctx) => ctx.viewport.setDisplayMode('wireframe')
         }
