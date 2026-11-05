@@ -35,6 +35,8 @@ export interface Command {
 export interface CommandGroup {
   label: string
   commands: Command[]
+  /** false: commands only in the menus / shortcuts / quick toolbar, not on the ribbon. */
+  ribbon?: boolean
 }
 
 /**

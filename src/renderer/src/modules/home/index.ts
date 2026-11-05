@@ -249,6 +249,7 @@ export const homeModule: CadModule = {
   groups: [
     {
       label: 'File',
+      ribbon: false, // in the File menu and the quick toolbar
       commands: [
         {
           id: 'file.new',
@@ -302,6 +303,7 @@ export const homeModule: CadModule = {
     },
     {
       label: 'Export (selection or all)',
+      ribbon: false, // File > Export
       commands: listExportCommands()
     },
     {

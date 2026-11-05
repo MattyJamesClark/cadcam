@@ -478,7 +478,7 @@ export class Shell {
       r.append(h('div', 'ribbon-planned', `<strong>${m.title}</strong> is coming in a later update. ${m.planned}`))
       return
     }
-    for (const g of m.groups) {
+    for (const g of m.groups.filter((x) => x.ribbon !== false)) {
       const group = h('div', 'ribbon-group')
       const row = h('div', 'ribbon-row')
       for (const c of g.commands) {
