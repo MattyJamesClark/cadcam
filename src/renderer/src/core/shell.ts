@@ -901,7 +901,13 @@ export class Shell {
           pill.hidden = false
           pill.classList.add('ready')
           pill.innerHTML = `${icons.update}<span>Update v${s.version} ready. Restart to apply</span>`
-          pill.onclick = () => host.updates.install()
+          pill.onclick = () => {
+            if (this.doc.history.dirty && !this.doc.isEmpty() && !confirm(`Restart to update? Unsaved changes to ${this.doc.name} will be lost.`)) return
+            // Say what's happening: the window closes, the update installs quietly, the app reopens.
+            const cover = h('div', 'update-cover', `Installing v${s.version}… CADCAM Studio will reopen by itself in a few seconds.`)
+            document.body.append(cover)
+            requestAnimationFrame(() => setTimeout(() => void host.updates.install(), 50))
+          }
           this.setStatus(`Version ${s.version} downloaded. Restart when convenient; it also installs when you close the app.`, 'success')
           break
         case 'not-available':

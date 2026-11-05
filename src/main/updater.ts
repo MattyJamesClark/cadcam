@@ -24,7 +24,14 @@ function broadcast(status: UpdateStatus): void {
  */
 export function initUpdater(): void {
   ipcMain.handle(IPC.updateStatus, () => lastStatus)
-  ipcMain.handle(IPC.updateInstall, () => autoUpdater.quitAndInstall(false, true))
+  // Silent install (no installer wizard), then relaunch. Windows are closed first
+  // so nothing looks frozen while the installer waits for the app to exit.
+  ipcMain.handle(IPC.updateInstall, () => {
+    setTimeout(() => {
+      for (const w of BrowserWindow.getAllWindows()) w.hide()
+      autoUpdater.quitAndInstall(true, true)
+    }, 600)
+  })
   ipcMain.handle(IPC.updateCheck, () => check())
 
   if (!app.isPackaged) {

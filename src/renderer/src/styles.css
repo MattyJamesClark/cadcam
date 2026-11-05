@@ -312,3 +312,4 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vb-row-label { flex: 1; }
 .vb-row-key { font-size: 11px; opacity: .6; }
 .vb-sep-h { height: 1px; background: var(--line); margin: 3px 2px; }
+.update-cover { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(15, 18, 22, .82); color: var(--text); font-size: 15px; text-align: center; padding: 24px; }

@@ -50,10 +50,10 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  win.once('ready-to-show', () => {
-    win.maximize()
-    win.show()
-  })
+  // Show the (dark) window straight away, so a slow first start after an
+  // install (Windows scanning the new files) doesn't look like nothing happened.
+  win.maximize()
+  win.show()
 
   // Open external links in the browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
