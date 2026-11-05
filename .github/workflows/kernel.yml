@@ -6,7 +6,7 @@ name: CAD kernel
 # releases don't depend on this (slow) build.
 on:
   push:
-    paths: ['kernel/*.cpp', 'kernel/CMakeLists.txt', '.github/workflows/kernel.yml']
+    paths: ['kernel/*.cpp', 'kernel/*.sh', 'kernel/*.mjs', '.github/workflows/kernel.yml']
   workflow_dispatch:
 
 permissions:
@@ -72,43 +72,9 @@ jobs:
           path: occt-build
           key: occt-${{ env.OCCT_TAG }}-emsdk-${{ env.EMSDK_VERSION }}-${{ matrix.variant }}-v1
       - name: Build kernel
-        run: |
-          mkdir -p out
-          incs=$(for d in occt/src/*/; do printf -- '-I%s ' "$d"; done)
-          libs=$(find occt-build -name 'libTK*.a' | sort | tr '\n' ' ')
-          echo "$libs" | tr ' ' '\n' | sed 's#.*/##'
-          em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
-          link() {
-            em++ $FLAGS cadkernel.o $libs -lembind "$@" \
-              -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel \
-              -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB \
-              -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS \
-              -o out/cadkernel.js
-          }
-          # Legacy wasm exceptions first; exnref (Chromium 137+, Electron 36+) if binaryen chokes on it.
-          # Objects are already -O3; the link-time wasm-opt pass is a bonus, and some
-          # binaryen versions fail to parse large EH modules, so fall back without it.
-          # The module must also compile in V8 (an LLVM bug once produced an invalid one).
-          valid() { "$EMSDK_NODE" -e "new WebAssembly.Module(require('fs').readFileSync('out/cadkernel.wasm'))"; }
-          if link -O3 && valid; then echo "${{ matrix.variant }}, link -O3" > out/BUILD.txt
-          elif link -O0 && valid; then echo "${{ matrix.variant }}, link -O0" > out/BUILD.txt
-          else
-            echo "no valid kernel; finding the function V8 rejects"
-            mkdir -p dbg
-            EMCC_DEBUG=1 em++ $FLAGS cadkernel.o $libs -lembind --profiling-funcs -O0 -sMODULARIZE=1 -sEXPORT_ES6=1 \
-              -sALLOW_MEMORY_GROWTH=1 -o dbg/k.js > dbg/log.txt 2>&1 || true
-            for w in $(find /tmp/emscripten_temp* dbg -name '*.wasm' 2>/dev/null); do
-              echo "== $w"
-              msg=$("$EMSDK_NODE" -e "try{new WebAssembly.Module(require('fs').readFileSync('$w'));console.log('valid')}catch(e){console.log(e.message)}")
-              echo "$msg"
-              n=$(echo "$msg" | grep -oE 'function #[0-9]+' | grep -oE '[0-9]+' | head -1)
-              [ -n "$n" ] && "$EMSDK_NODE" kernel/wasm-fn-name.mjs "$w" "$n"
-            done
-            exit 1
-          fi
-          cat out/BUILD.txt
-          cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
-          ls -la out
+        run: kernel/build.sh
+        env:
+          VARIANT: ${{ matrix.variant }}
       # Commit the built kernel next to its worker on this branch, so it can be
       # tested and then merged into main with the app changes that use it.
       - name: Commit kernel
