@@ -41,6 +41,16 @@ type DocEvents = {
   selection: string[]
   /** Dimensions were added, removed or moved. */
   dims: void
+  /** Work planes were added, removed, moved or shown / hidden. */
+  planes: void
+}
+
+/** A user work plane (datum): its frame to world, column-major 4x4. */
+export interface WorkPlane {
+  id: string
+  name: string
+  matrix: number[]
+  visible: boolean
 }
 
 type V3 = [number, number, number]
@@ -460,6 +470,64 @@ export class CadDocument extends Emitter<DocEvents> {
     this.history.record({ label: 'Move dimension', undo: () => set(from), redo: () => set(to) })
   }
 
+  // ---- work planes ---------------------------------------------------------
+
+  planes: WorkPlane[] = []
+
+  addPlane(p: Omit<WorkPlane, 'id'>): WorkPlane {
+    const plane: WorkPlane = { ...p, id: newId() }
+    const add = (): void => {
+      this.planes.push(plane)
+      this.emit('planes', undefined)
+    }
+    const remove = (): void => {
+      this.planes = this.planes.filter((x) => x !== plane)
+      this.emit('planes', undefined)
+    }
+    add()
+    this.history.record({ label: `Add ${plane.name}`, undo: remove, redo: add })
+    return plane
+  }
+
+  removePlane(id: string): void {
+    const i = this.planes.findIndex((x) => x.id === id)
+    if (i < 0) return
+    const plane = this.planes[i]
+    const remove = (): void => {
+      this.planes = this.planes.filter((x) => x !== plane)
+      this.emit('planes', undefined)
+    }
+    remove()
+    this.history.record({
+      label: `Delete ${plane.name}`,
+      undo: () => {
+        this.planes.splice(Math.min(i, this.planes.length), 0, plane)
+        this.emit('planes', undefined)
+      },
+      redo: remove
+    })
+  }
+
+  /** Change a plane (move, rotate, rename, show / hide) as one undo step. */
+  updatePlane(id: string, change: Partial<Omit<WorkPlane, 'id'>>, label: string): void {
+    const plane = this.planes.find((x) => x.id === id)
+    if (!plane) return
+    const before: Partial<WorkPlane> = {}
+    for (const k of Object.keys(change) as (keyof typeof change)[]) (before as Record<string, unknown>)[k] = structuredClone(plane[k])
+    const set = (v: Partial<WorkPlane>): void => {
+      Object.assign(plane, structuredClone(v))
+      this.emit('planes', undefined)
+    }
+    set(change)
+    this.history.record({ label, undo: () => set(before), redo: () => set(change) })
+  }
+
+  /** Replace all planes without history (opening a project). */
+  setPlanes(planes: WorkPlane[]): void {
+    this.planes = planes.map((p) => ({ ...p, id: newId() }))
+    this.emit('planes', undefined)
+  }
+
   /** Replace all dimensions without history (opening a project). */
   setDims(dims: Dimension[]): void {
     this.dims = dims.map((d) => ({ ...d, id: newId() }))
@@ -473,6 +541,7 @@ export class CadDocument extends Emitter<DocEvents> {
     this.history.batch('New', () => {
       for (const n of [...this.roots]) this.removeNode(n)
       this.removeDims(this.dims.map((d) => d.id))
+      for (const p of [...this.planes]) this.removePlane(p.id)
       this.history.record({
         label: 'New',
         undo: () => {
@@ -500,6 +569,8 @@ export class CadDocument extends Emitter<DocEvents> {
     this.selected.clear()
     this.dims = []
     this.emit('dims', undefined)
+    this.planes = []
+    this.emit('planes', undefined)
     this.history.reset()
     this.name = 'Untitled'
     this.filePath = null

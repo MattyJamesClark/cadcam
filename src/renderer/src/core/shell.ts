@@ -1,5 +1,6 @@
 import { selection } from './selection'
 import { startBottomBar } from './bottombar'
+import { startPlanes } from './planes'
 import * as THREE from 'three'
 import { CadDocument, type DocNode, type Measure } from './document'
 import { icons } from './icons'
@@ -157,6 +158,7 @@ export class Shell {
     this.bindUpdates()
     selection.start(this.ctx)
     startBottomBar(this.ctx)
+    startPlanes(this.ctx)
     for (const m of this.modules) m.init?.(this.ctx)
     let fitQueued = false
     new ResizeObserver(() => {

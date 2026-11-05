@@ -317,3 +317,15 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vp-prompt b { color: var(--accent); font-weight: 600; }
 .vp-prompt-note { color: var(--muted); }
 .vp-prompt-esc { color: var(--muted); font-size: 11.5px; opacity: .8; }
+.planes-panel { width: 250px; }
+.plane-add { display: flex; gap: 6px; margin-bottom: 8px; }
+.plane-add .btn { flex: 1; }
+.plane-list { display: flex; flex-direction: column; gap: 2px; }
+.plane-row { display: flex; align-items: center; gap: 2px; min-height: 28px; padding: 0 2px 0 6px; border-radius: 5px; }
+.plane-row:hover { background: var(--panel-3); }
+.plane-row.fixed .plane-name { color: var(--muted); }
+.plane-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.plane-btn { width: 24px; height: 24px; }
+.plane-btn svg { width: 15px; height: 15px; }
+.plane-tag { position: absolute; transform: translate(-50%, -50%); font-size: 11px; color: #bfdbfe; background: rgba(15, 23, 42, .7); padding: 0 5px; border-radius: 3px; pointer-events: none; white-space: nowrap; z-index: 2; }
+.plane-edit .tool-grid { grid-template-columns: 18px 1fr; } .plane-edit .seg { margin-bottom: 4px; }
