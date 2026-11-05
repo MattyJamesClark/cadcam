@@ -59,6 +59,9 @@ export class Viewport extends Emitter<ViewportEvents> {
   private raycaster = new THREE.Raycaster()
   private ndc = new THREE.Vector2()
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+  /** Active workplane (frame to world). Grid, axes, cursor readout and standard views follow it. */
+  readonly workplane = new THREE.Matrix4()
+  private workInv = new THREE.Matrix4()
   private downAt: { x: number; y: number } | null = null
   private bgLight = false
 
@@ -103,6 +106,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.planes = makeOriginPlanes()
     this.planes.visible = false
     this.scene.add(this.grid, this.planes, this.axes, doc.root)
+    for (const g of [this.grid, this.axes]) g.matrixAutoUpdate = false
 
     this.viewCube = new ViewCube(host, (dir) => this.lookNormalTo(dir))
     this.triad = new AxisTriad(host, (dir) => this.lookNormalTo(dir))
@@ -150,7 +154,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     const target = this.nav.pose.target
     this.headLight.position.copy(cam.position)
     this.headLight.target.position.copy(target)
-    this.grid.userData.update(cam, target, this.nav.pose.dist)
+    this.grid.userData.update(cam, target.clone().applyMatrix4(this.workInv), this.nav.pose.dist)
     this.renderer.render(this.scene, cam)
     this.viewCube.render(cam)
     this.triad.render(cam)
@@ -294,7 +298,22 @@ export class Viewport extends Emitter<ViewportEvents> {
   }
 
   setStandardView(v: StandardView): void {
-    this.lookFrom(VIEW_DIRS[v])
+    const rot = new THREE.Matrix4().extractRotation(this.workplane)
+    const dir = VIEW_DIRS[v].clone().applyMatrix4(rot)
+    const d = VIEW_DIRS[v]
+    const up = Math.abs(d.z) > 0.999 ? new THREE.Vector3(0, d.z > 0 ? 1 : -1, 0) : new THREE.Vector3(0, 0, 1)
+    this.nav.goTo(this.nav.poseLookingFrom(dir, up.applyMatrix4(rot)), true)
+  }
+
+  /** Make a frame the active workplane (identity = Absolute). */
+  setWorkplane(m: THREE.Matrix4): void {
+    this.workplane.copy(m)
+    this.workInv.copy(m).invert()
+    for (const g of [this.grid, this.axes]) g.matrix.copy(m)
+    const n = new THREE.Vector3(0, 0, 1).transformDirection(m)
+    this.groundPlane.setFromNormalAndCoplanarPoint(n, new THREE.Vector3().setFromMatrixPosition(m))
+    this.emit('settings', undefined)
+    this.requestRender()
   }
 
   /** Zoom so everything visible fits (or a default work area if empty). */
@@ -474,7 +493,8 @@ export class Viewport extends Emitter<ViewportEvents> {
       this.nav.applyTo(this.camera)
       this.raycaster.setFromCamera(this.ndc, this.camera)
       const p = new THREE.Vector3()
-      this.emit('cursor', this.raycaster.ray.intersectPlane(this.groundPlane, p) ? p : null)
+      // Reported in the active workplane's coordinates.
+      this.emit('cursor', this.raycaster.ray.intersectPlane(this.groundPlane, p) ? p.applyMatrix4(this.workInv) : null)
     })
     el.addEventListener('pointerleave', () => this.emit('cursor', null))
   }
@@ -513,13 +533,17 @@ function makeGrid(): THREE.Group {
       uFade: { value: 2000 },
       uCam: { value: new THREE.Vector3() },
       uColor: { value: new THREE.Color(0xaab4c0) },
-      uStrength: { value: 1 }
+      uStrength: { value: 1 },
+      uLocal: { value: new THREE.Matrix4() }
     },
     vertexShader: /* glsl */ `
+      uniform mat4 uLocal;
       varying vec3 vPos;
+      varying vec2 vLoc;
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vPos = wp.xyz;
+        vLoc = (uLocal * vec4(position, 1.0)).xy;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragmentShader: /* glsl */ `
@@ -529,6 +553,7 @@ function makeGrid(): THREE.Group {
       uniform vec3 uCam;
       uniform vec3 uColor;
       varying vec3 vPos;
+      varying vec2 vLoc;
       float line(vec2 p, float s) {
         vec2 c = p / s;
         vec2 w = fwidth(c);
@@ -536,7 +561,7 @@ function makeGrid(): THREE.Group {
         return 1.0 - min(min(g.x, g.y), 1.0);
       }
       void main() {
-        float a = max(line(vPos.xy, uMinor) * 0.18, line(vPos.xy, uMinor * 10.0) * 0.42) * uStrength;
+        float a = max(line(vLoc, uMinor) * 0.18, line(vLoc, uMinor * 10.0) * 0.42) * uStrength;
         float d = length(vPos - uCam);
         a *= 1.0 - smoothstep(uFade * 0.35, uFade, d);
         if (a < 0.004) discard;
@@ -556,6 +581,8 @@ function makeGrid(): THREE.Group {
     mat.uniforms.uCam.value.copy(cam.position)
     plane.scale.set(fade * 2.2, fade * 2.2, 1)
     plane.position.set(target.x, target.y, 0)
+    plane.updateMatrix()
+    mat.uniforms.uLocal.value.copy(plane.matrix)
   }
   g.userData.setColor = (color: number, strength: number): void => {
     mat.uniforms.uColor.value.set(color)

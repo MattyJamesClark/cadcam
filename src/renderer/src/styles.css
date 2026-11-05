@@ -330,3 +330,25 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .plane-tag { position: absolute; transform: translate(-50%, -50%); font-size: 11px; color: #bfdbfe; background: rgba(15, 23, 42, .7); padding: 0 5px; border-radius: 3px; pointer-events: none; white-space: nowrap; z-index: 2; }
 .plane-edit .tool-grid { grid-template-columns: 18px 1fr; } .plane-edit .seg { margin-bottom: 4px; }
 .tool-pick-row { display: flex; gap: 6px; margin: 6px 0 8px; } .tool-pick-row .btn { flex: 1; padding-left: 4px; padding-right: 4px; }
+.plane-add .btn { padding-left: 4px; padding-right: 4px; }
+.plane-row { cursor: pointer; }
+.plane-row.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.plane-row.active .plane-name { color: var(--text); font-weight: 600; }
+.plane-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); margin-right: 6px; flex: none; }
+.plane-row.active .plane-dot { background: var(--accent); border-color: var(--accent); }
+.plane-hint { margin-top: 6px; font-size: 11.5px; }
+.vb-wp { font-size: 11.5px; color: var(--muted); padding: 0 6px 0 2px; cursor: pointer; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.vb-wp:hover { color: var(--text); }
+.vp-strip { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: color-mix(in srgb, var(--panel) 96%, transparent); border: 1px solid var(--accent-line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.25); font-size: 12.5px; z-index: 6; white-space: nowrap; max-width: calc(100% - 20px); overflow-x: auto; }
+.vp-strip.hidden { display: none; }
+.vs-title { color: var(--accent); font-weight: 600; margin: 0 4px; }
+.vs-btn { width: 26px; height: 26px; } .vs-btn svg { width: 16px; height: 16px; }
+.vs-btn.on { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text); }
+.vs-text { height: 26px; padding: 0 8px; font-size: 12px; }
+.vs-sep { width: 1px; height: 20px; background: var(--border, #444); margin: 0 4px; }
+.vs-group { display: flex; align-items: center; gap: 3px; margin-right: 6px; }
+.vs-label { color: var(--muted); font-size: 11.5px; margin-right: 2px; }
+.vs-field { display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; }
+.vs-field.axis-x span { color: #ef4444; } .vs-field.axis-y span { color: #22c55e; } .vs-field.axis-z span { color: #3b82f6; }
+.vs-field input { width: 46px; height: 22px; font-size: 12px; padding: 0 4px; }
+.vs-readout { color: var(--muted); font-size: 11.5px; margin-right: 4px; font-variant-numeric: tabular-nums; }

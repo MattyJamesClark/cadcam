@@ -7,14 +7,17 @@ import { icons } from './icons'
 import { measureCad } from './occt'
 import { Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
 import { addBottomButton } from './bottombar'
-import { isPickingPoints, pointMoveButtons } from './pointpick'
+import { isPickingPoints, pickPoints } from './pointpick'
 import { el, fmt, toolPanel } from './toolpanel'
 
 /**
- * Work planes (datums): made from 3 points or from a flat face (origin at the
- * face's bottom-left corner), then moved and rotated with a handle or typed
- * values. They're listed in the Planes manager (bottom bar), drawn in the view,
- * saved in the project, and every tool with a datum choice can measure from them.
+ * Work planes, the VISI way: one plane is active at a time (Absolute by
+ * default) and the grid, axes, X/Y/Z readout and standard views follow it.
+ * Planes are made from 3 points, a flat face (origin at its bottom-left
+ * corner) or an origin point, and moved / rotated from a strip at the bottom
+ * of the view: point to point, to a midpoint, or typed incremental values in
+ * the plane's own axes. Listed in the Planes manager (bottom bar), saved in
+ * the project, and usable as datums by measuring tools.
  */
 
 const COLOR = 0x60a5fa
@@ -26,12 +29,21 @@ export function startPlanes(ctx: ModuleContext): void {
   mgr = new PlaneManager(ctx)
   const btn = addBottomButton(icons.planes, 'Planes: create, move and rotate work planes', () => mgr!.toggle())
   mgr.button = btn
+  const tag = el('span', 'vb-wp')
+  tag.title = 'Active workplane (open Planes to change it)'
+  tag.addEventListener('click', () => mgr!.toggle())
+  btn.after(tag)
+  mgr.tag = tag
+  mgr.syncActive()
 }
 
 const toMatrix = (m: number[]): THREE.Matrix4 => new THREE.Matrix4().fromArray(m)
 
 class PlaneManager {
   button: HTMLButtonElement | null = null
+  tag: HTMLElement | null = null
+  /** Active workplane id; null = Absolute. */
+  active: string | null = null
   private group = new THREE.Group()
   private labels = new Map<string, HTMLElement>()
   private panel: HTMLElement | null = null
@@ -48,9 +60,25 @@ class PlaneManager {
   }
 
   private changed(): void {
+    if (this.active && !this.ctx.doc.planes.some((p) => p.id === this.active)) this.active = null
+    this.syncActive()
     datums.setUser(this.ctx.doc.planes.map((p) => ({ id: p.id, name: p.name, matrix: toMatrix(p.matrix) })))
     this.redraw()
     this.renderList()
+  }
+
+  setActive(id: string | null): void {
+    this.active = id
+    this.syncActive()
+    this.redraw()
+    this.renderList()
+  }
+
+  /** Push the active plane to the view (grid, axes, readout, views) and the bottom-bar tag. */
+  syncActive(): void {
+    const p = this.ctx.doc.planes.find((x) => x.id === this.active)
+    this.ctx.viewport.setWorkplane(p ? toMatrix(p.matrix) : new THREE.Matrix4())
+    if (this.tag) this.tag.textContent = p ? p.name : 'Absolute'
   }
 
   /** Plane drawing size: a share of the model, so it reads at any scale. */
@@ -72,7 +100,7 @@ class PlaneManager {
     for (const p of this.ctx.doc.planes) {
       if (!p.visible) continue
       keep.add(p.id)
-      this.group.add(drawPlane(toMatrix(p.matrix), s))
+      this.group.add(drawPlane(toMatrix(p.matrix), s, p.id === this.active))
       let lab = this.labels.get(p.id)
       if (!lab) {
         lab = el('div', 'plane-tag')
@@ -106,15 +134,17 @@ class PlaneManager {
     const { panel, body } = toolPanel('Planes', () => this.closePanel())
     panel.classList.add('planes-panel')
     const add = el('div', 'plane-add')
-    const b3 = el('button', 'btn', '3 points')
-    b3.title = 'Click the origin, a point along X, then a point in the plane'
-    b3.addEventListener('click', () => this.startTool(new ThreePointTool(this.ctx)))
-    const bf = el('button', 'btn', 'From face')
-    bf.title = 'Click a flat face: the plane lies on it with its origin at the bottom-left corner'
-    bf.addEventListener('click', () => this.startTool(new FaceTool(this.ctx)))
-    add.append(b3, bf)
+    const make = (label: string, title: string, fn: () => void): void => {
+      const b = el('button', 'btn', label)
+      b.title = title
+      b.addEventListener('click', fn)
+      add.append(b)
+    }
+    make('3 points', 'New plane: click the origin, a point along X, then a point in the plane', () => this.startTool(new ThreePointTool(this.ctx)))
+    make('Face', 'New plane on a flat face, origin at its bottom-left corner', () => this.startTool(new FaceTool(this.ctx)))
+    make('Origin', 'New plane at a clicked point, lined up with the active plane', () => this.startTool(new OriginTool(this.ctx)))
     this.list = el('div', 'plane-list')
-    body.append(add, this.list)
+    body.append(add, this.list, el('div', 'tool-empty plane-hint', 'Click a plane to make it active.'))
     this.ctx.viewport.host.append(panel)
     this.panel = panel
     this.button?.classList.add('narrowed')
@@ -140,12 +170,23 @@ class PlaneManager {
     const list = this.list
     if (!list) return
     list.replaceChildren()
+    const activeRow = (id: string | null, row: HTMLElement): void => {
+      row.classList.toggle('active', id === this.active)
+      const dot = el('span', 'plane-dot')
+      row.prepend(dot)
+      row.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('button')) return
+        this.setActive(id)
+      })
+    }
     const world = el('div', 'plane-row fixed')
     world.append(el('span', 'plane-name', 'Absolute'))
     world.title = 'The absolute origin and XY plane'
+    activeRow(null, world)
     list.append(world)
     for (const p of this.ctx.doc.planes) {
       const row = el('div', 'plane-row')
+      activeRow(p.id, row)
       const name = el('span', 'plane-name', p.name)
       name.title = 'Double-click to rename'
       name.addEventListener('dblclick', () => {
@@ -164,7 +205,10 @@ class PlaneManager {
         btn(p.visible ? icons.eye : icons.eyeOff, p.visible ? 'Hide' : 'Show', () =>
           this.ctx.doc.updatePlane(p.id, { visible: !p.visible }, p.visible ? 'Hide plane' : 'Show plane')
         ),
-        btn(icons.move, 'Move / rotate', () => this.startTool(new EditTool(this.ctx, p))),
+        btn(icons.move, 'Move / rotate', () => {
+          this.setActive(p.id)
+          this.startTool(new EditTool(this.ctx, p))
+        }),
         btn(icons.trash, 'Delete', () => this.ctx.doc.removePlane(p.id))
       )
       list.append(row)
@@ -174,17 +218,17 @@ class PlaneManager {
 }
 
 /** A square with a light fill, its outline and X / Y / Z axes from the origin. */
-function drawPlane(m: THREE.Matrix4, s: number): THREE.Object3D {
+function drawPlane(m: THREE.Matrix4, s: number, active = false): THREE.Object3D {
   const g = new THREE.Group()
   g.matrixAutoUpdate = false
   g.matrix.copy(m)
   const fill = new THREE.Mesh(
     new THREE.PlaneGeometry(s, s).translate(s / 2, s / 2, 0),
-    new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: active ? 0.2 : 0.1, side: THREE.DoubleSide, depthWrite: false })
   )
   const edge = new THREE.LineSegments(
     new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, s, 0, 0, s, 0, 0, s, s, 0, s, s, 0, 0, s, 0, 0, s, 0, 0, 0, 0], 3)),
-    new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8 })
+    new THREE.LineBasicMaterial({ color: active ? 0xfbbf24 : COLOR, transparent: true, opacity: 0.9 })
   )
   g.add(fill, edge)
   const a = s * 0.3
@@ -212,6 +256,12 @@ const nextName = (ctx: ModuleContext): string => {
   let i = ctx.doc.planes.length + 1
   while (ctx.doc.planes.some((p) => p.name === `Plane ${i}`)) i++
   return `Plane ${i}`
+}
+
+/** Add a plane and make it the active one (as VISI does). */
+function newPlane(ctx: ModuleContext, m: THREE.Matrix4): void {
+  const p = ctx.doc.addPlane({ name: nextName(ctx), matrix: m.toArray(), visible: true })
+  mgr?.setActive(p.id)
 }
 
 /** Shared picking with a bottom prompt; Esc closes. */
@@ -320,7 +370,7 @@ class ThreePointTool extends PickTool {
       return this.say('Plane by 3 points', this.steps[0], 'Those points are in a line: try again.')
     }
     const m = frame(o, x, z)
-    this.ctx.doc.addPlane({ name: nextName(this.ctx), matrix: m.toArray(), visible: true })
+    newPlane(this.ctx, m)
     this.close()
   }
 }
@@ -370,7 +420,23 @@ class FaceTool extends PickTool {
     if (!isFinite(minX)) return
     const origin = new THREE.Vector3(minX, minY, z).applyMatrix4(m0)
     const m = m0.clone().setPosition(origin)
-    this.ctx.doc.addPlane({ name: nextName(this.ctx), matrix: m.toArray(), visible: true })
+    newPlane(this.ctx, m)
+    this.close()
+  }
+}
+
+/** New plane at a clicked point, with the active plane's orientation. */
+class OriginTool extends PickTool {
+  protected filter = { vertex: true, edge: true, face: true }
+
+  constructor(ctx: ModuleContext) {
+    super(ctx)
+    this.say('Plane at origin', 'select the new origin')
+  }
+
+  protected async pick(p: Pick): Promise<void> {
+    const m = this.ctx.viewport.workplane.clone().setPosition(p.point)
+    newPlane(this.ctx, m)
     this.close()
   }
 }
@@ -392,14 +458,19 @@ function facePoints(p: Pick): THREE.Vector3[] {
   return out
 }
 
-/** Move / rotate a plane: a handle in the view plus typed values. Enter = OK, Esc = cancel. */
+/**
+ * Move / rotate a plane from a strip at the bottom of the view (no side
+ * panel): drag the handle, click point to point or to a midpoint, or type
+ * incremental moves / turns in the plane's own axes (Enter applies).
+ * Enter with nothing typed = OK, Esc = cancel.
+ */
 class EditTool {
   onDone?: () => void
   private proxy = new THREE.Object3D()
   private controls: TransformControls
   private helper: THREE.Object3D
-  private panel: HTMLElement
-  private inputs: HTMLInputElement[] = []
+  private strip: HTMLElement
+  private readout = el('span', 'vs-readout')
   private off: (() => void)[] = []
   private start: THREE.Matrix4
   private preview: THREE.Object3D | null = null
@@ -422,79 +493,104 @@ class EditTool {
     this.controls.addEventListener('objectChange', () => this.update())
     vp.blockPick = () => this.controls.axis !== null || this.controls.dragging
 
-    const { panel, body } = toolPanel(`Move / rotate ${plane.name}`, () => this.cancel())
-    panel.classList.add('plane-edit')
-    this.panel = panel
-    const mode = el('div', 'seg tool-seg')
-    for (const [m, label] of [['translate', 'Move'], ['rotate', 'Rotate']] as const) {
-      const b = el('button', '', label)
-      b.setAttribute('aria-checked', String(m === 'translate'))
-      b.addEventListener('click', () => {
-        this.controls.setMode(m)
-        mode.querySelectorAll('button').forEach((x) => x.setAttribute('aria-checked', String(x === b)))
-      })
-      mode.append(b)
+    const strip = el('div', 'vp-strip')
+    this.strip = strip
+    strip.append(el('b', 'vs-title', plane.name))
+
+    const icon = (svg: string, title: string, fn: () => void): HTMLButtonElement => {
+      const b = el('button', 'icon-btn vs-btn')
+      b.innerHTML = svg
+      b.title = title
+      b.addEventListener('click', fn)
+      return b
     }
-    body.append(
-      mode,
-      pointMoveButtons(
-        ctx,
-        () => {},
-        (d) => {
-          this.proxy.position.add(d)
-          this.update()
-        }
-      ),
-      el('div', 'tool-section', 'Origin (absolute)')
+    // Handle mode: drag to move or to turn.
+    const mMove = icon(icons.move, 'Drag handle: move', () => setMode('translate'))
+    const mRot = icon(icons.rotate, 'Drag handle: rotate', () => setMode('rotate'))
+    const setMode = (m: 'translate' | 'rotate'): void => {
+      this.controls.setMode(m)
+      mMove.classList.toggle('on', m === 'translate')
+      mRot.classList.toggle('on', m === 'rotate')
+    }
+    setMode('translate')
+    const pick = async (title: string, steps: string[], delta: (p: THREE.Vector3[]) => THREE.Vector3): Promise<void> => {
+      strip.classList.add('hidden')
+      const p = await pickPoints(ctx, title, steps)
+      strip.classList.remove('hidden')
+      if (!p) return
+      this.proxy.position.add(delta(p))
+      this.update()
+    }
+    const p2p = el('button', 'btn vs-text', 'Point to point')
+    p2p.title = 'Click the point to move from, then the point to move to'
+    p2p.addEventListener('click', () => void pick('Point to point', ['select the point to move from', 'select the point to move to'], (p) => p[1].sub(p[0])))
+    const mid = el('button', 'btn vs-text', 'Midpoint')
+    mid.title = 'Click the point to move from, then two points: it moves to halfway between them'
+    mid.addEventListener('click', () =>
+      void pick('Midpoint', ['select the point to move from', 'select the first point', 'select the second point'], (p) => p[1].add(p[2]).multiplyScalar(0.5).sub(p[0]))
     )
-    const grid = el('div', 'tool-grid')
-    ;(['X', 'Y', 'Z'] as const).forEach((axis, i) => {
-      const label = el('label', `tool-axis axis-${axis.toLowerCase()}`, axis)
+    const org = el('button', 'btn vs-text', 'Origin to point')
+    org.title = "Click a point: the plane's origin moves there"
+    org.addEventListener('click', () => void pick('Origin to point', ['select the new origin'], (p) => p[0].sub(this.proxy.position)))
+
+    // Incremental, in the plane's own axes.
+    const field = (label: string, cls: string, title: string, apply: (v: number) => void): HTMLElement => {
+      const wrap = el('label', `vs-field ${cls}`)
       const input = el('input')
       input.type = 'number'
-      input.addEventListener('change', () => {
-        const v = parseFloat(input.value)
-        if (Number.isFinite(v)) this.proxy.position.setComponent(i, v)
-        this.update()
-      })
-      this.inputs.push(input)
-      grid.append(label, input)
-    })
-    body.append(grid, el('div', 'tool-section', 'Rotate about the plane’s own axis'))
-    const rot = el('div', 'tool-grid rot-grid')
-    ;(['X', 'Y', 'Z'] as const).forEach((axis, i) => {
-      const label = el('label', `tool-axis axis-${axis.toLowerCase()}`, axis)
-      const input = el('input')
-      input.type = 'number'
-      input.placeholder = '°'
-      input.title = `Degrees to turn about the plane's ${axis} axis (Enter applies)`
+      input.placeholder = '0'
+      input.title = title
       input.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return
         e.stopPropagation()
+        e.preventDefault()
         const v = parseFloat(input.value)
-        if (!Number.isFinite(v) || !v) return
-        const ax = new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0)
-        this.proxy.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(ax, THREE.MathUtils.degToRad(v)))
         input.value = ''
+        if (!Number.isFinite(v) || !v) return this.ok()
+        apply(v)
         this.update()
       })
-      rot.append(label, input)
+      wrap.append(el('span', '', label), input)
+      return wrap
+    }
+    const axis = (i: number): THREE.Vector3 => new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0)
+    const inc = el('div', 'vs-group')
+    inc.append(el('span', 'vs-label', 'Move'))
+    ;['X', 'Y', 'Z'].forEach((a, i) =>
+      inc.append(
+        field(a, `axis-${a.toLowerCase()}`, `Move along the plane's ${a} axis by this much (Enter)`, (v) =>
+          this.proxy.position.add(axis(i).applyQuaternion(this.proxy.quaternion).multiplyScalar(v))
+        )
+      )
+    )
+    const rot = el('div', 'vs-group')
+    rot.append(el('span', 'vs-label', 'Turn °'))
+    ;['X', 'Y', 'Z'].forEach((a, i) =>
+      rot.append(
+        field(a, `axis-${a.toLowerCase()}`, `Turn about the plane's ${a} axis by this many degrees (Enter)`, (v) =>
+          this.proxy.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(axis(i), THREE.MathUtils.degToRad(v)))
+        )
+      )
+    )
+    const reset = icon(icons.selPrev, 'Undo these changes (back to where it started)', () => {
+      this.start.decompose(this.proxy.position, this.proxy.quaternion, this.proxy.scale)
+      this.update()
     })
-    const actions = el('div', 'tool-buttons')
-    const ok = el('button', 'btn primary', 'OK')
+    const ok = el('button', 'btn primary vs-text', 'OK')
     ok.addEventListener('click', () => this.ok())
-    const cancel = el('button', 'btn', 'Cancel')
+    const cancel = el('button', 'btn vs-text', 'Cancel')
     cancel.addEventListener('click', () => this.cancel())
-    actions.append(cancel, ok)
-    body.append(rot, actions)
-    panel.style.top = 'auto'
-    panel.style.bottom = '60px'
-    vp.host.append(panel)
+    const sep = (): HTMLElement => el('span', 'vs-sep')
+    strip.append(mMove, mRot, sep(), p2p, mid, org, sep(), inc, rot, sep(), this.readout, reset, cancel, ok)
+    vp.host.append(strip)
 
     const onKey = (e: KeyboardEvent): void => {
       if (isPickingPoints()) return
-      if (e.key === 'Escape') this.cancel()
-      else if (e.key === 'Enter' && !(e.target as HTMLElement).closest('.rot-grid')) this.ok()
+      if ((e.target as HTMLElement).closest?.('input')) {
+        if (e.key === 'Escape') (e.target as HTMLInputElement).blur()
+        else return
+      } else if (e.key === 'Escape') this.cancel()
+      else if (e.key === 'Enter') this.ok()
       else return
       e.preventDefault()
       e.stopPropagation()
@@ -511,16 +607,14 @@ class EditTool {
 
   private update(): void {
     const p = this.proxy.position
-    this.inputs.forEach((inp, i) => {
-      if (document.activeElement !== inp) inp.value = fmt(p.getComponent(i)).replace(/,/g, '')
-    })
+    this.readout.textContent = `Origin ${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)}`
     if (this.preview) {
       this.ctx.viewport.scene.remove(this.preview)
       this.preview.traverse((o) => (o as THREE.Mesh).geometry?.dispose())
     }
     const b = this.ctx.doc.bounds()
     const s = Math.max(20, (b.isEmpty() ? 100 : b.getSize(new THREE.Vector3()).length()) * 0.25)
-    this.preview = drawPlane(this.matrix(), s)
+    this.preview = drawPlane(this.matrix(), s, true)
     this.ctx.viewport.scene.add(this.preview)
     this.ctx.viewport.requestRender()
   }
@@ -545,7 +639,7 @@ class EditTool {
     const vp = this.ctx.viewport
     vp.scene.remove(this.helper, this.proxy)
     if (this.preview) vp.scene.remove(this.preview)
-    this.panel.remove()
+    this.strip.remove()
     vp.blockPick = null
     vp.requestRender()
     this.onDone?.()
