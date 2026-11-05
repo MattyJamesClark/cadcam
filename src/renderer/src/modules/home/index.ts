@@ -160,12 +160,21 @@ async function exportAs(ctx: ModuleContext, ext: string): Promise<void> {
     n.object.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
     group.add(copy)
   }
-  const bytes = await exp.write(group)
+  let bytes: Uint8Array
+  try {
+    bytes = await exp.write(group, (stage, done, total) =>
+      ctx.status(total ? `${stage} ${done}/${total}…` : `${stage}…`)
+    )
+  } catch (e) {
+    ctx.status(`Export failed: ${(e as Error).message}`, 'error')
+    return
+  }
   const name = `${ctx.doc.name.replace(/\.[^.]+$/, '') || 'export'}.${ext}`
   const host = window.host
   if (host) {
     const saved = await host.saveFile(name, [{ name: exp.name, extensions: [ext] }], bytes)
-    if (saved) ctx.status(`Exported ${items.length} item(s) to ${saved}`, 'success')
+    if (saved) ctx.status(`Exported ${items.length} item(s) to ${saved}${exp.lastNote ? ` (${exp.lastNote})` : ''}`, exp.lastNote ? 'warn' : 'success')
+    else ctx.status('')
   } else {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([bytes as BlobPart]))
@@ -175,6 +184,17 @@ async function exportAs(ctx: ModuleContext, ext: string): Promise<void> {
   }
 }
 
+/** Exact parameters of a quick shape, so it exports as a true box / cylinder / sphere. */
+function primParams(kind: string, geo: THREE.BufferGeometry): Record<string, unknown> | undefined {
+  const b = geo.boundingBox!
+  const size = b.getSize(new THREE.Vector3())
+  const c = b.getCenter(new THREE.Vector3())
+  if (kind === 'Box') return { type: 'box', min: b.min.toArray(), dx: size.x, dy: size.y, dz: size.z }
+  if (kind === 'Cylinder') return { type: 'cylinder', base: [c.x, c.y, b.min.z], radius: size.x / 2, height: size.z }
+  if (kind === 'Sphere') return { type: 'sphere', center: c.toArray(), radius: size.x / 2 }
+  return undefined
+}
+
 let counter = 0
 function addPrimitive(ctx: ModuleContext, kind: string, geo: THREE.BufferGeometry, z: number): void {
   // Sit on the XY plane, to the right of whatever is already there.
@@ -182,6 +202,8 @@ function addPrimitive(ctx: ModuleContext, kind: string, geo: THREE.BufferGeometr
   const existing = ctx.doc.bounds()
   const x = existing.isEmpty() ? 0 : existing.max.x + 20 - geo.boundingBox!.min.x
   geo.translate(x, 0, z)
+  geo.computeBoundingBox()
+  geo.userData.prim = primParams(kind, geo)
   const mesh = new THREE.Mesh(geo, partMaterial())
   ctx.doc.addBody(mesh, `${kind} ${++counter}`, kind)
   ctx.viewport.fitAll()
@@ -346,9 +368,9 @@ export const homeModule: CadModule = {
 
 function listExportCommands(): CadModule['groups'][number]['commands'] {
   // Exporters are registered before modules load (see main.ts).
-  return ['stl', 'obj', 'ply', 'glb'].map((ext) => ({
+  return ['step', 'igs', 'brep', 'stl', 'obj', 'ply', 'glb'].map((ext) => ({
     id: `file.export.${ext}`,
-    label: ext.toUpperCase(),
+    label: ext === 'igs' ? 'IGES' : ext.toUpperCase(),
     icon: icons.export,
     tooltip: `Export as .${ext}`,
     isEnabled: hasItems,

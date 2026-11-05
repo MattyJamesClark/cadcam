@@ -27,6 +27,8 @@ interface CadMesh {
   index: Uint32Array
   faces: [number, number, RGB | null][]
   edges: Float32Array
+  /** The exact body (OCCT binary B-rep), kept so it can be exported again. */
+  brep?: Uint8Array
 }
 interface CadResult {
   root: CadNode
@@ -41,14 +43,15 @@ let worker: Worker | null = null
 let nextId = 1
 const pending = new Map<
   number,
-  { resolve: (r: CadResult) => void; reject: (e: Error) => void; progress?: CadProgress }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  { resolve: (r: any) => void; reject: (e: Error) => void; progress?: CadProgress }
 >()
 
 function getWorker(): Worker {
   if (worker) return worker
   worker = new Worker(new URL('vendor/cadkernel/worker.mjs', document.baseURI), { type: 'module' })
   worker.onmessage = (
-    ev: MessageEvent<{ id: number; result?: CadResult; error?: string; stage?: string; done?: number; total?: number }>
+    ev: MessageEvent<{ id: number; result?: unknown; error?: string; stage?: string; done?: number; total?: number }>
   ) => {
     const p = pending.get(ev.data.id)
     if (!p) return
@@ -96,12 +99,49 @@ export async function readCadFile(
   return buildScene(result)
 }
 
+/** A node of the model as the kernel's writer takes it (see kernel/cadkernel.cpp). */
+export interface CadWriteNode {
+  name: string
+  kind: 'assembly' | 'part' | 'body'
+  color?: RGB
+  layers?: string[]
+  /** Placement in the parent, row-major 3x4. */
+  matrix?: number[]
+  children?: CadWriteNode[]
+  brep?: Uint8Array
+  brepId?: number
+  prim?: Record<string, unknown>
+  mesh?: { position: Float32Array; index?: Uint32Array }
+}
+
+export interface CadWriteResult {
+  bytes: Uint8Array
+  /** Bodies with no usable geometry (e.g. huge meshes, point clouds). */
+  skipped: number
+  /** Mesh bodies written as faceted solids. */
+  faceted: number
+}
+
+/** Write STEP / IGES / BREP through the CAD kernel. */
+export function writeCadFile(
+  format: 'step' | 'iges' | 'brep',
+  root: CadWriteNode,
+  progress?: CadProgress
+): Promise<CadWriteResult> {
+  const id = nextId++
+  return new Promise<CadWriteResult>((resolve, reject) => {
+    pending.set(id, { resolve, reject, progress })
+    // Structured clone copies the B-rep buffers, so the scene keeps its own.
+    getWorker().postMessage({ id, op: 'write', format, spec: { root } })
+  })
+}
+
 // ---- import cache (IndexedDB) ---------------------------------------------
 // Converting B-rep to triangles is the slow part of an import, and toolmakers
 // reopen the same files a lot. The result is kept per file content + quality.
 
 /** Bump when the reader's output changes, so stale results aren't reused. */
-const READER_VERSION = 4
+const READER_VERSION = 5
 const CACHE_ENTRIES = 24
 
 async function cacheKey(data: ArrayBuffer, format: string, quality: string): Promise<string | null> {
@@ -191,6 +231,7 @@ function buildScene(res: CadResult): THREE.Object3D {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3))
     geo.userData.edgePositions = m.edges
+    if (m.brep) geo.userData.brep = m.brep
     if (m.index.length === 0) return geo // wireframe body: edges only
     let index = m.index
     if (m.faces.some((f) => f[2])) {
@@ -240,6 +281,7 @@ function buildScene(res: CadResult): THREE.Object3D {
       const src = res.meshes[n.mesh]
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.BufferAttribute(src.edges, 3))
+      if (src.brep) geo.userData.brep = src.brep
       const mat = new THREE.LineBasicMaterial()
       if (color) mat.color.setRGB(color[0], color[1], color[2])
       else mat.userData.defaultColor = true

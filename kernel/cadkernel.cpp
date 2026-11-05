@@ -7,9 +7,11 @@
 // is what makes imports fast.
 //
 // JS:  Module.readCad(path, format, ratio, angle, progress) -> { root, meshes }
+//      Module.writeCad(path, format, spec) -> { skipped } | { error }   (see writer below)
 //   Node = { name, ref, kind: 'assembly'|'part'|'body', color?, layers?, matrix?,
 //            mesh?, wire?, solid?, children }
-//   Mesh = { position: Float32Array, index: Uint32Array, faces: [first, last, color|null][], edges: Float32Array }
+//   Mesh = { position: Float32Array, index: Uint32Array, faces: [first, last, color|null][], edges: Float32Array,
+//            brep: Uint8Array (the exact body, OCCT binary format, kept so it can be written back out) }
 //   `ref` is the product name of the referenced shape (to look up STEP product data).
 
 #include <emscripten/bind.h>
@@ -17,6 +19,20 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BinTools.hxx>
+#include <IGESCAFControl_Writer.hxx>
+#include <STEPCAFControl_Writer.hxx>
+#include <STEPControl_StepModelType.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopoDS_Shell.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
@@ -50,10 +66,14 @@
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_LayerTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
+#include <gp.hxx>
+#include <gp_Ax2.hxx>
 #include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 #include <algorithm>
 #include <array>
+#include <sstream>
 #include <stdexcept>
 #include <cmath>
 #include <map>
@@ -116,6 +136,7 @@ struct MeshOut {
     std::optional<RGB> color;
   };
   std::vector<Face> faces;
+  std::string brep;
 };
 
 template <typename ColorFn>
@@ -174,6 +195,14 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
       // Edge without a 3D curve: skip it.
     }
   }
+  // The exact shape, without the display triangles (they're rebuilt on read).
+  try {
+    std::ostringstream os;
+    BinTools::Write(shape, os, false, false, BinTools_FormatVersion_CURRENT);
+    out.brep = os.str();
+  } catch (const Standard_Failure&) {
+    // Not fatal: the body just can't be exported exactly.
+  }
   return out;
 }
 
@@ -189,6 +218,9 @@ val meshVal(const MeshOut& m) {
     faces.call<void>("push", e);
   }
   o.set("faces", faces);
+  if (!m.brep.empty())
+    o.set("brep", val(emscripten::typed_memory_view(m.brep.size(), reinterpret_cast<const uint8_t*>(m.brep.data())))
+                      .call<val>("slice"));
   return o;
 }
 
@@ -522,7 +554,261 @@ val readBrep(const std::string& path, double ratio, double angle, Progress progr
   return res;
 }
 
+
+// ---- writer --------------------------------------------------------------------
+//
+// spec = { name, format, root: Node }
+//   Node = { name, kind: 'assembly'|'part'|'body', color?: [r,g,b], layers?: string[],
+//            matrix?: number[12] (row-major 3x4, placement in the parent), children?: Node[],
+//            brep?: Uint8Array (exact body), brepId?: number (same id = same shape, written once),
+//            prim?: { type: 'box'|'cylinder'|'sphere', ... }, mesh?: { position: Float32Array, index?: Uint32Array } }
+// Bodies with neither an exact shape nor a primitive are written as faceted
+// solids from their triangles (e.g. STL imports), up to a size limit.
+
+class XcafWriter {
+ public:
+  explicit XcafWriter(Progress progress) : progress_(progress) {
+    doc_ = new TDocStd_Document("XmlXCAF");
+    // Sets up the XCAF tools on the document.
+    shapeTool_ = XCAFDoc_DocumentTool::ShapeTool(doc_->Main());
+    colorTool_ = XCAFDoc_DocumentTool::ColorTool(doc_->Main());
+    layerTool_ = XCAFDoc_DocumentTool::LayerTool(doc_->Main());
+    shapeTool_->SetAutoNaming(false);
+  }
+
+  /** Builds the document; returns the top label (null if nothing could be written). */
+  TDF_Label build(val root) {
+    countBodies(root);
+    TDF_Label top = add(root);
+    shapeTool_->UpdateAssemblies();
+    return top;
+  }
+
+  Handle(TDocStd_Document) doc() const { return doc_; }
+  int skipped() const { return skipped_; }
+  int faceted() const { return faceted_; }
+
+ private:
+  void countBodies(val n) {
+    if (n["kind"].as<std::string>() == "body") total_++;
+    val kids = n["children"];
+    if (!kids.isUndefined() && !kids.isNull())
+      for (int i = 0, c = kids["length"].as<int>(); i < c; i++) countBodies(kids[i]);
+  }
+
+  static bool has(const val& o, const char* key) {
+    val v = o[key];
+    return !v.isUndefined() && !v.isNull();
+  }
+
+  static std::optional<RGB> colorOf(const val& n) {
+    if (!has(n, "color")) return std::nullopt;
+    val c = n["color"];
+    return RGB{c[0].as<double>(), c[1].as<double>(), c[2].as<double>()};
+  }
+
+  /** Placement in the parent; `scale` is set when it isn't a rigid motion. */
+  static gp_Trsf trsfOf(const val& n) {
+    gp_Trsf t;
+    if (!has(n, "matrix")) return t;
+    val m = n["matrix"];
+    double v[12];
+    for (int i = 0; i < 12; i++) v[i] = m[i].as<double>();
+    t.SetValues(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]);
+    return t;
+  }
+
+  void decorate(const TDF_Label& label, const val& n) {
+    std::string name = has(n, "name") ? n["name"].as<std::string>() : "";
+    if (!name.empty()) TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str(), true));
+    if (auto c = colorOf(n))
+      colorTool_->SetColor(label, Quantity_Color((*c)[0], (*c)[1], (*c)[2], Quantity_TOC_RGB), XCAFDoc_ColorGen);
+    if (has(n, "layers")) {
+      val l = n["layers"];
+      for (int i = 0, c = l["length"].as<int>(); i < c; i++)
+        layerTool_->SetLayer(label, TCollection_ExtendedString(l[i].as<std::string>().c_str(), true));
+    }
+  }
+
+  TopoDS_Shape facetedShape(const val& mesh) {
+    std::vector<float> pos = emscripten::convertJSArrayToNumberVector<float>(mesh["position"]);
+    std::vector<uint32_t> idx;
+    if (has(mesh, "index")) idx = emscripten::convertJSArrayToNumberVector<uint32_t>(mesh["index"]);
+    else
+      for (uint32_t i = 0; i < pos.size() / 3; i++) idx.push_back(i);
+    const size_t tris = idx.size() / 3;
+    if (tris == 0 || tris > 60000) return TopoDS_Shape();
+    BRepBuilderAPI_Sewing sew(1e-4);
+    auto P = [&](uint32_t i) { return gp_Pnt(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]); };
+    int added = 0;
+    for (size_t t = 0; t < tris; t++) {
+      const gp_Pnt a = P(idx[t * 3]), b = P(idx[t * 3 + 1]), c = P(idx[t * 3 + 2]);
+      if (a.Distance(b) < 1e-7 || b.Distance(c) < 1e-7 || a.Distance(c) < 1e-7) continue;
+      if (gp_Vec(a, b).Crossed(gp_Vec(a, c)).Magnitude() < 1e-12) continue;
+      try {
+        BRepBuilderAPI_MakePolygon poly(a, b, c, true);
+        if (!poly.IsDone()) continue;
+        BRepBuilderAPI_MakeFace face(poly.Wire(), true);
+        if (!face.IsDone()) continue;
+        sew.Add(face.Face());
+        added++;
+      } catch (const Standard_Failure&) {
+      }
+    }
+    if (!added) return TopoDS_Shape();
+    sew.Perform();
+    TopoDS_Shape s = sew.SewedShape();
+    // A closed shell becomes a solid.
+    if (s.ShapeType() == TopAbs_SHELL && s.Closed()) {
+      BRepBuilderAPI_MakeSolid solid(TopoDS::Shell(s));
+      if (solid.IsDone()) return solid.Solid();
+    }
+    return s;
+  }
+
+  TopoDS_Shape primShape(const val& p) {
+    const std::string type = p["type"].as<std::string>();
+    auto num = [&](const char* k) { return p[k].as<double>(); };
+    auto pnt = [&](const char* k) { val a = p[k]; return gp_Pnt(a[0].as<double>(), a[1].as<double>(), a[2].as<double>()); };
+    if (type == "box") return BRepPrimAPI_MakeBox(pnt("min"), num("dx"), num("dy"), num("dz")).Shape();
+    if (type == "cylinder") return BRepPrimAPI_MakeCylinder(gp_Ax2(pnt("base"), gp::DZ()), num("radius"), num("height")).Shape();
+    if (type == "sphere") return BRepPrimAPI_MakeSphere(pnt("center"), num("radius")).Shape();
+    return TopoDS_Shape();
+  }
+
+  TopoDS_Shape bodyShape(const val& n) {
+    if (has(n, "brep")) {
+      const int id = has(n, "brepId") ? n["brepId"].as<int>() : -1;
+      if (id >= 0) {
+        auto it = breps_.find(id);
+        if (it != breps_.end()) return it->second;
+      }
+      std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(n["brep"]);
+      std::istringstream is(std::string(bytes.begin(), bytes.end()));
+      TopoDS_Shape s;
+      BinTools::Read(s, is);
+      if (id >= 0) breps_[id] = s;
+      return s;
+    }
+    if (has(n, "prim")) return primShape(n["prim"]);
+    if (has(n, "mesh")) {
+      TopoDS_Shape s = facetedShape(n["mesh"]);
+      if (!s.IsNull()) faceted_++;
+      return s;
+    }
+    return TopoDS_Shape();
+  }
+
+  /** A body label; equal bodies (same shape, name, colour) are written once and instanced. */
+  TDF_Label bodyLabel(const val& n, const gp_Trsf* bake) {
+    std::string key;
+    if (!bake && has(n, "brepId")) {
+      std::ostringstream k;
+      k << n["brepId"].as<int>() << '|' << (has(n, "name") ? n["name"].as<std::string>() : "");
+      if (auto c = colorOf(n)) k << '|' << (*c)[0] << ',' << (*c)[1] << ',' << (*c)[2];
+      key = k.str();
+      auto it = bodies_.find(key);
+      if (it != bodies_.end()) return it->second;
+    }
+    progress_("Writing bodies", ++done_, total_);
+    TopoDS_Shape s;
+    try {
+      s = bodyShape(n);
+      if (!s.IsNull() && bake) s = BRepBuilderAPI_Transform(s, *bake, true).Shape();
+    } catch (const Standard_Failure&) {
+      s.Nullify();
+    }
+    if (s.IsNull()) {
+      skipped_++;
+      return TDF_Label();
+    }
+    TDF_Label label = shapeTool_->AddShape(s, false);
+    decorate(label, n);
+    if (!key.empty()) bodies_[key] = label;
+    return label;
+  }
+
+  TDF_Label add(const val& n) {
+    if (n["kind"].as<std::string>() == "body") return bodyLabel(n, nullptr);
+    TDF_Label label = shapeTool_->NewShape();
+    int count = 0;
+    val kids = n["children"];
+    for (int i = 0, c = has(n, "children") ? kids["length"].as<int>() : 0; i < c; i++) {
+      val child = kids[i];
+      gp_Trsf t = trsfOf(child);
+      TDF_Label cl;
+      if (std::fabs(t.ScaleFactor() - 1) > 1e-9 || t.IsNegative()) {
+        // Locations must be rigid motions: bake scaling / mirroring into the geometry.
+        if (child["kind"].as<std::string>() != "body") continue;
+        cl = bodyLabel(child, &t);
+        t = gp_Trsf();
+      } else cl = add(child);
+      if (cl.IsNull()) continue;
+      shapeTool_->AddComponent(label, cl, TopLoc_Location(t));
+      count++;
+    }
+    if (!count) {
+      shapeTool_->RemoveShape(label);
+      return TDF_Label();
+    }
+    decorate(label, n);
+    return label;
+  }
+
+  Progress progress_;
+  Handle(TDocStd_Document) doc_;
+  Handle(XCAFDoc_ShapeTool) shapeTool_;
+  Handle(XCAFDoc_ColorTool) colorTool_;
+  Handle(XCAFDoc_LayerTool) layerTool_;
+  std::map<int, TopoDS_Shape> breps_;
+  std::map<std::string, TDF_Label> bodies_;
+  int skipped_ = 0, faceted_ = 0, done_ = 0, total_ = 0;
+};
+
 }  // namespace
+
+val writeCad(std::string path, std::string format, val spec, val progressFn) {
+  Progress progress{progressFn};
+  try {
+    XcafWriter w(progress);
+    TDF_Label top = w.build(spec["root"]);
+    if (top.IsNull()) throw std::runtime_error("Nothing to export: none of the items has exportable geometry");
+    progress("Writing file");
+    if (format == "brep") {
+      if (!BRepTools::Write(XCAFDoc_ShapeTool::GetShape(top), path.c_str())) throw std::runtime_error("Could not write the BREP file");
+    } else if (format == "step") {
+      Interface_Static::SetCVal("write.step.unit", "MM");
+      Interface_Static::SetIVal("write.stepcaf.subshapes.name", 1);
+      STEPCAFControl_Writer wr;
+      wr.SetColorMode(true);
+      wr.SetNameMode(true);
+      wr.SetLayerMode(true);
+      if (!wr.Transfer(w.doc(), STEPControl_AsIs)) throw std::runtime_error("The CAD kernel could not convert the model to STEP");
+      if (wr.Write(path.c_str()) != IFSelect_RetDone) throw std::runtime_error("Could not write the STEP file");
+    } else {
+      Interface_Static::SetCVal("write.iges.unit", "MM");
+      Interface_Static::SetIVal("write.iges.brep.mode", 1);  // solids as B-rep (type 186), not trimmed surfaces
+      IGESCAFControl_Writer wr;
+      wr.SetColorMode(true);
+      wr.SetNameMode(true);
+      wr.SetLayerMode(true);
+      if (!wr.Transfer(w.doc())) throw std::runtime_error("The CAD kernel could not convert the model to IGES");
+      if (!wr.Write(path.c_str())) throw std::runtime_error("Could not write the IGES file");
+    }
+    val res = val::object();
+    res.set("skipped", w.skipped());
+    res.set("faceted", w.faceted());
+    return res;
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
 
 val readCad(std::string path, std::string format, double ratio, double angle, val progressFn) {
   Progress progress{progressFn};
@@ -567,4 +853,5 @@ val readCad(std::string path, std::string format, double ratio, double angle, va
 
 EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("readCad", &readCad);
+  emscripten::function("writeCad", &writeCad);
 }

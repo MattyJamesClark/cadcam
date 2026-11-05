@@ -20,7 +20,7 @@ import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'
 import { PLYExporter } from 'three/examples/jsm/exporters/PLYExporter.js'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import { normaliseImported, partMaterial, registerExporter, registerImporter } from './io'
-import { readCadFile } from './occt'
+import { readCadFile, writeCadFile, type CadWriteNode } from './occt'
 
 const text = (data: ArrayBuffer): string => new TextDecoder().decode(data)
 const meshOf = (geo: THREE.BufferGeometry): THREE.Mesh => {
@@ -154,6 +154,25 @@ export function registerBuiltinFormats(): void {
   })
 
   // ---- exporters ----------------------------------------------------------
+  for (const [ext, format, name] of [
+    ['step', 'step', 'STEP'],
+    ['igs', 'iges', 'IGES'],
+    ['brep', 'brep', 'OpenCascade BREP']
+  ] as const) {
+    const exp: Parameters<typeof registerExporter>[0] = {
+      name,
+      extension: ext,
+      async write(root, progress) {
+        const res = await writeCadFile(format, cadSpec(root), progress)
+        const notes: string[] = []
+        if (res.faceted) notes.push(`${res.faceted} mesh body(ies) written as faceted solids`)
+        if (res.skipped) notes.push(`${res.skipped} item(s) left out (no exact geometry)`)
+        exp.lastNote = notes.join(', ') || undefined
+        return res.bytes
+      }
+    }
+    registerExporter(exp)
+  }
   registerExporter({
     name: 'STL (binary)',
     extension: 'stl',
@@ -183,6 +202,55 @@ export function registerBuiltinFormats(): void {
       return new Uint8Array(res as ArrayBuffer)
     }
   })
+}
+
+/** Largest mesh (in triangles) the kernel turns into a faceted solid. */
+const MAX_FACETED = 60000
+
+/** The model as the CAD kernel's writer takes it: exact bodies where we have them. */
+function cadSpec(root: THREE.Object3D): CadWriteNode {
+  const brepIds = new Map<Uint8Array, number>()
+  const identity = new THREE.Matrix4()
+  const node = (o: THREE.Object3D): CadWriteNode | null => {
+    if (!o.visible || o.name === '__edges') return null
+    o.updateMatrix()
+    const e = o.matrix.elements // column-major
+    const base: CadWriteNode = { name: o.name, kind: 'assembly' }
+    if (!o.matrix.equals(identity)) base.matrix = [e[0], e[4], e[8], e[12], e[1], e[5], e[9], e[13], e[2], e[6], e[10], e[14]]
+    const layers = o.userData.layers as string[] | undefined
+    if (layers?.length) base.layers = layers
+    const shape = o as THREE.Mesh
+    if ((shape.isMesh || (o as THREE.LineSegments).isLineSegments) && shape.geometry) {
+      const geo = shape.geometry
+      const mat = (Array.isArray(shape.material) ? shape.material[0] : shape.material) as THREE.MeshStandardMaterial
+      const body: CadWriteNode = { ...base, kind: 'body' }
+      if (mat?.color && !mat.userData.defaultColor && !mat.vertexColors) body.color = [mat.color.r, mat.color.g, mat.color.b]
+      const brep = geo.userData.brep as Uint8Array | undefined
+      if (brep) {
+        if (!brepIds.has(brep)) brepIds.set(brep, brepIds.size)
+        body.brep = brep
+        body.brepId = brepIds.get(brep)
+      } else if (geo.userData.prim) body.prim = geo.userData.prim
+      else if (shape.isMesh) {
+        const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined
+        const tris = (geo.index ? geo.index.count : (pos?.count ?? 0)) / 3
+        if (pos && tris <= MAX_FACETED && !(pos as unknown as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute)
+          body.mesh = {
+            position: pos.array instanceof Float32Array ? pos.array : new Float32Array(pos.array),
+            index: geo.index ? Uint32Array.from(geo.index.array) : undefined
+          }
+      }
+      return body
+    }
+    if ((o as THREE.Points).isPoints) return null
+    const children = o.children.map(node).filter((c): c is CadWriteNode => !!c)
+    if (!children.length) return null
+    return { ...base, kind: o.userData.cadKind === 'part' ? 'part' : 'assembly', children }
+  }
+  const children = root.children.map(node).filter((c): c is CadWriteNode => !!c)
+  // One item without a placement is the model itself; otherwise wrap in an assembly.
+  if (children.length === 1 && !children[0].matrix) return children[0]
+  return { name: children.length === 1 ? children[0].name : 'Assembly', kind: 'assembly', children }
 }
 
 /**
