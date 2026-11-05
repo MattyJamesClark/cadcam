@@ -1,11 +1,28 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, join, normalize, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import log from 'electron-log/main'
 import { IPC, type AppInfo, type FileFilter, type OpenedFile } from '../shared/ipc'
 import { initUpdater } from './updater'
 
 log.initialize()
+
+// The UI is served from app://bundle/ rather than file:// so that web workers
+// and WebAssembly (the CAD kernel) load like on a normal web origin.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
+
+function registerAppProtocol(): void {
+  const root = normalize(join(__dirname, '../renderer'))
+  protocol.handle('app', (req) => {
+    const { pathname } = new URL(req.url)
+    const file = normalize(join(root, decodeURIComponent(pathname)))
+    if (!file.startsWith(root + sep)) return new Response('Not found', { status: 404 })
+    return net.fetch(pathToFileURL(file).toString())
+  })
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -39,7 +56,7 @@ function createWindow(): BrowserWindow {
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadURL('app://bundle/index.html')
   }
   return win
 }
@@ -89,6 +106,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     app.setAppUserModelId('com.mattyjamesclark.cadcam')
+    registerAppProtocol()
     registerIpc()
     createWindow()
     initUpdater()

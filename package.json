@@ -13,7 +13,10 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "npm run build && electron-builder --win --config electron-builder.config.cjs --publish never",
-    "release": "npm run dist"
+    "release": "npm run dist",
+    "postinstall": "node scripts/copy-vendor.mjs",
+    "predev": "node scripts/copy-vendor.mjs",
+    "prebuild": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
     "electron-log": "^5.4.3",
@@ -25,6 +28,8 @@
     "electron": "^39.0.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.1",
+    "occt-import-js": "^0.0.23",
+    "rhino3dm": "^8.17.0",
     "three": "^0.180.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"

@@ -1,6 +1,6 @@
 import './styles.css'
 import { registerBuiltinFormats } from './core/formats'
-import { extOf, importerFor } from './core/io'
+import { extOf, importerFor, unsupportedReason } from './core/io'
 import { Shell } from './core/shell'
 import { initTheme } from './core/settingsDialog'
 import { modules } from './modules'
@@ -24,8 +24,10 @@ window.addEventListener('drop', async (e) => {
   document.body.classList.remove('dropping')
   const files = [...(e.dataTransfer?.files ?? [])]
   const supported = files.filter((f) => importerFor(f.name))
-  const skipped = files.filter((f) => !importerFor(f.name)).map((f) => '.' + extOf(f.name))
-  if (skipped.length) shell.setStatus(`Skipped unsupported: ${[...new Set(skipped)].join(', ')}`, 'warn')
+  const skipped = files.filter((f) => !importerFor(f.name))
+  if (skipped.length === 1) shell.setStatus(unsupportedReason(skipped[0].name), 'warn')
+  else if (skipped.length)
+    shell.setStatus(`Skipped ${skipped.length} unsupported files: ${skipped.map((f) => '.' + extOf(f.name)).join(', ')}`, 'warn')
   await importFiles(
     shell.ctx,
     await Promise.all(supported.map(async (f) => ({ name: f.name, data: await f.arrayBuffer() }))),

@@ -183,8 +183,8 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.triad.setVisible(s.showTriad)
     const part = new THREE.Color(s.partColor)
     this.doc.root.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
-      if (m && !Array.isArray(m) && m.userData?.defaultColor) m.color.copy(part)
+      const mm = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined
+      for (const m of Array.isArray(mm) ? mm : mm ? [mm] : []) if (m.userData?.defaultColor) m.color.copy(part)
     })
     this.applySelection()
     this.requestRender()
@@ -299,11 +299,13 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.doc.root.traverse((o) => {
       const mesh = o as THREE.Mesh
       if (!mesh.isMesh || o.name === EDGE_TAG) return
-      const m = mesh.material as THREE.MeshStandardMaterial
-      if (!m || !('emissive' in m)) return
       const on = sel.has(mesh.userData.docId)
-      m.emissive.copy(on ? SELECT_COLOR : new THREE.Color(0))
-      m.emissiveIntensity = on ? 0.45 : 0
+      const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]
+      for (const m of mats) {
+        if (!m || !('emissive' in m)) continue
+        m.emissive.copy(on ? SELECT_COLOR : new THREE.Color(0))
+        m.emissiveIntensity = on ? 0.45 : 0
+      }
     })
   }
 

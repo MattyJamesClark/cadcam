@@ -2,6 +2,7 @@ import { Emitter } from './events'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
 export type NavStyle = 'solidworks' | 'generic'
+export type ImportQuality = 'draft' | 'normal' | 'fine'
 
 export interface Settings {
   theme: ThemeMode
@@ -17,6 +18,8 @@ export interface Settings {
   rotateAboutCursor: boolean
   showViewCube: boolean
   showTriad: boolean
+  /** Tessellation quality for STEP/IGES/BREP solids. */
+  importQuality: ImportQuality
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -29,7 +32,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reverseWheel: false,
   rotateAboutCursor: true,
   showViewCube: true,
-  showTriad: true
+  showTriad: true,
+  importQuality: 'normal'
 }
 
 export const ACCENTS = ['#ff9f1c', '#e5484d', '#3e8ef7', '#12a594', '#46a758', '#8e4ec6', '#d6409f', '#f5d90a']

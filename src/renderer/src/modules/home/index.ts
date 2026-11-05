@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { extOf, importerFor, listExporters, listImporters, partMaterial } from '@/core/io'
+import { importerFor, listExporters, listImporters, loadFile, partMaterial, unsupportedReason } from '@/core/io'
 import { icons } from '@/core/icons'
 import type { CadModule, ModuleContext } from '@/core/types'
 
@@ -14,8 +14,10 @@ async function pickFiles(): Promise<PickedFile[]> {
   const host = window.host
   if (host) {
     const files = await host.openFiles([
-      { name: 'Supported files', extensions: exts },
-      ...listImporters().map((i) => ({ name: i.name, extensions: i.extensions }))
+      { name: 'All supported 3D files', extensions: exts },
+      { name: 'CAD solids (STEP, IGES, BREP, 3DM)', extensions: listImporters().filter((i) => i.solid || i.extensions.includes('3dm')).flatMap((i) => i.extensions) },
+      ...listImporters().map((i) => ({ name: i.name, extensions: i.extensions })),
+      { name: 'All files', extensions: ['*'] }
     ])
     return files.map((f) => ({
       name: f.name,
@@ -43,11 +45,18 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
   for (const f of files) {
     const imp = importerFor(f.name)
     if (!imp) {
-      ctx.status(`${f.name}: .${extOf(f.name)} files aren't supported yet`, 'warn')
+      ctx.status(unsupportedReason(f.name), 'warn')
       continue
     }
     const t0 = performance.now()
-    const obj = await imp.load(f.data, f.name)
+    ctx.status(`Reading ${f.name}${imp.solid ? ' with the CAD kernel' : ''}…`)
+    let obj
+    try {
+      obj = await loadFile(imp, f.data, f.name)
+    } catch (e) {
+      ctx.status(`${f.name}: couldn't read it (${(e as Error).message ?? e})`, 'error')
+      continue
+    }
     const base = f.name.replace(/\.[^.]+$/, '')
     ctx.doc.add(obj, { name: base, kind: imp.name, source: f.name })
     ok++

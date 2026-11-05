@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   effectiveTheme,
   settings,
+  type ImportQuality,
   type NavStyle,
   type Settings,
   type ThemeMode
@@ -139,6 +140,19 @@ export function openSettings(): void {
         </section>
 
         <section>
+          <h3>Import</h3>
+          <div class="field">
+            <label>STEP / IGES quality</label>
+            <div class="seg" role="radiogroup">
+              ${(['draft', 'normal', 'fine'] as ImportQuality[])
+                .map((q) => `<button role="radio" aria-checked="${s.importQuality === q}" data-quality="${q}">${cap(q)}</button>`)
+                .join('')}
+            </div>
+            <span class="hint inline">How finely curved surfaces are turned into triangles. Fine looks smoother but is slower on big assemblies. Applies to the next import.</span>
+          </div>
+        </section>
+
+        <section>
           <h3>Viewport</h3>
           <label class="check"><input type="checkbox" data-bool="showTriad" ${s.showTriad ? 'checked' : ''}/> Show XYZ triad (bottom left)</label>
           <label class="check"><input type="checkbox" data-bool="showViewCube" ${s.showViewCube ? 'checked' : ''}/> Show view cube (top right)</label>
@@ -160,6 +174,7 @@ export function openSettings(): void {
     if (d.theme) settings.set({ theme: d.theme as ThemeMode })
     if (d.accent) settings.set({ accent: d.accent })
     if (d.nav) settings.set({ navStyle: d.nav as NavStyle })
+    if (d.quality) settings.set({ importQuality: d.quality as ImportQuality })
     if (d.bg) {
       const p = BACKGROUNDS[Number(d.bg)]
       settings.set({ viewportTop: p.top, viewportBottom: p.bottom })
