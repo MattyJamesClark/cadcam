@@ -370,3 +370,7 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vf-btn svg { width: 20px; height: 20px; }
 .vf-btn:hover { background: var(--panel-3); color: var(--text); }
 .vf-btn.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--text); }
+.vp-strip .tool-pick-row { display: flex; gap: 4px; margin: 0; }
+.vp-strip .tool-pick-row .btn { height: 26px; padding: 0 8px; font-size: 12px; }
+.vp-strip .tool-count { width: 46px; height: 22px; font-size: 12px; }
+.vs-copy { display: flex; align-items: center; gap: 3px; font-size: 12px; margin-left: 2px; }

@@ -7,7 +7,8 @@ import type { DocNode } from './document'
 
 /**
  * Translate tool: move the selection, or copy it (once or several times), by
- * dragging the on-screen XYZ handle or typing distances in the side panel.
+ * dragging the on-screen XYZ handle, clicking points, or typing distances
+ * (along the active workplane's axes) in the strip at the bottom of the view.
  * Nothing changes in the document until OK, so Cancel / Esc leaves it as it was,
  * and OK is one undo step.
  */
@@ -117,6 +118,13 @@ class TranslateTool {
     this.inputs[0].select()
   }
 
+  /** Active workplane rotation: typed X / Y / Z are along its axes (VISI). */
+  private axes(): { rot: THREE.Matrix4; inv: THREE.Matrix4 } {
+    const rot = new THREE.Matrix4().extractRotation(this.ctx.viewport.workplane)
+    return { rot, inv: rot.clone().transpose() }
+  }
+
+  /** A strip along the bottom of the view (no side panel); OK / Cancel are on the tick bar. */
   private buildPanel(): HTMLElement {
     const el = (tag: string, cls?: string, text?: string): HTMLElement => {
       const e = document.createElement(tag)
@@ -124,45 +132,48 @@ class TranslateTool {
       if (text) e.textContent = text
       return e
     }
-    const panel = el('div', 'tool-panel')
-    const head = el('div', 'tool-head')
-    head.append(el('span', 'tool-name', 'Translate'), (this.title = el('span', 'tool-sub')))
-    panel.append(head)
-
-    const grid = el('div', 'tool-grid')
-    ;(['X', 'Y', 'Z'] as const).forEach((axis, i) => {
-      const label = el('label', `tool-axis axis-${axis.toLowerCase()}`, axis)
-      const input = document.createElement('input')
-      input.type = 'number'
-      input.step = '1'
-      input.value = '0'
-      input.addEventListener('input', () => {
-        const v = parseFloat(input.value)
-        this.delta.setComponent(i, Number.isFinite(v) ? v : 0)
-        this.preview()
-      })
-      input.addEventListener('focus', () => input.select())
-      ;(label as HTMLLabelElement).htmlFor = input.id = `tr-${axis}`
-      this.inputs.push(input)
-      grid.append(label, input, el('span', 'tool-unit', 'mm'))
-    })
+    const panel = el('div', 'vp-strip translate-strip')
+    panel.append(el('b', 'vs-title', 'Translate'), (this.title = el('span', 'vs-label')))
     panel.append(
       pointMoveButtons(
         this.ctx,
         () => {
           this.delta.set(0, 0, 0)
           this.preview()
+          panel.classList.add('hidden')
         },
         (d) => {
           this.delta.copy(d)
           this.preview()
-        }
+        },
+        () => panel.classList.remove('hidden')
       )
     )
-    panel.append(grid)
+    const grid = el('div', 'vs-group')
+    grid.append(el('span', 'vs-label', 'Move'))
+    ;(['X', 'Y', 'Z'] as const).forEach((axis, i) => {
+      const wrap = el('label', `vs-field axis-${axis.toLowerCase()}`)
+      const input = document.createElement('input')
+      input.type = 'number'
+      input.step = '1'
+      input.value = '0'
+      input.title = `Distance along the active plane's ${axis} axis (mm)`
+      input.addEventListener('input', () => {
+        const { rot, inv } = this.axes()
+        const local = this.delta.clone().applyMatrix4(inv)
+        const v = parseFloat(input.value)
+        local.setComponent(i, Number.isFinite(v) ? v : 0)
+        this.delta.copy(local.applyMatrix4(rot))
+        this.preview()
+      })
+      input.addEventListener('focus', () => input.select())
+      this.inputs.push(input)
+      wrap.append(el('span', '', axis), input)
+      grid.append(wrap)
+    })
+    panel.append(el('span', 'vs-sep'), grid, el('span', 'vs-sep'))
 
-    const copyRow = el('div', 'tool-row')
-    const copyLabel = el('label', 'check')
+    const copyLabel = el('label', 'check vs-copy')
     this.copyBox = document.createElement('input')
     this.copyBox.type = 'checkbox'
     copyLabel.append(this.copyBox, document.createTextNode(' Copy'))
@@ -175,7 +186,6 @@ class TranslateTool {
     this.countBox.disabled = true
     this.countBox.className = 'tool-count'
     this.countBox.title = 'Number of copies. Each copy is one step further along.'
-    const countLabel = el('span', 'tool-unit', 'copies')
     this.copyBox.addEventListener('change', () => {
       this.copy = this.copyBox.checked
       this.countBox.disabled = !this.copy
@@ -188,18 +198,10 @@ class TranslateTool {
       this.rebuildGhosts()
       this.preview()
     })
-    copyRow.append(copyLabel, this.countBox, countLabel)
-    panel.append(copyRow)
-
-    panel.append(el('div', 'tool-hint', 'Drag the arrows, type distances, or pick points. Enter = OK, Esc = cancel.'))
-    const buttons = el('div', 'tool-buttons')
-    const cancel = el('button', 'btn', 'Cancel')
-    const ok = el('button', 'btn primary', 'OK')
-    cancel.addEventListener('click', () => this.cancel())
-    ok.addEventListener('click', () => this.ok())
-    buttons.append(cancel, ok)
-    panel.append(buttons)
-    // Keep clicks in the panel from reaching the viewport.
+    const copyGroup = el('div', 'vs-group')
+    copyGroup.append(copyLabel, this.countBox, el('span', 'vs-label', 'copies'))
+    panel.append(copyGroup)
+    // Keep clicks in the strip from reaching the viewport.
     panel.addEventListener('pointerdown', (e) => e.stopPropagation())
     return panel
   }
@@ -221,8 +223,9 @@ class TranslateTool {
   }
 
   private showValues(): void {
+    const local = this.delta.clone().applyMatrix4(this.axes().inv)
     this.inputs.forEach((input, i) => {
-      if (document.activeElement !== input || !this.controls.dragging) input.value = fmt(this.delta.getComponent(i))
+      if (document.activeElement !== input || this.controls.dragging) input.value = fmt(local.getComponent(i))
     })
   }
 

@@ -111,20 +111,22 @@ export function pickPoints(ctx: ModuleContext, title: string, steps: string[]): 
 }
 
 /** "Point to point" and "To midpoint" buttons for a move panel; `apply` gets the distance to move. */
-export function pointMoveButtons(ctx: ModuleContext, before: () => void, apply: (delta: THREE.Vector3) => void): HTMLElement {
+export function pointMoveButtons(ctx: ModuleContext, before: () => void, apply: (delta: THREE.Vector3) => void, after: () => void = () => {}): HTMLElement {
   const row = el('div', 'tool-pick-row')
   const b1 = el('button', 'btn', 'Point to point')
   b1.title = 'Click the point to move from, then the point to move to'
   b1.addEventListener('click', async () => {
     before()
     const p = await pickPoints(ctx, 'Point to point', ['select the point to move from', 'select the point to move to'])
+    after()
     if (p) apply(p[1].sub(p[0]))
   })
-  const b2 = el('button', 'btn', 'To midpoint')
+  const b2 = el('button', 'btn', 'Midpoint')
   b2.title = 'Click the point to move from, then two points: it moves to halfway between them'
   b2.addEventListener('click', async () => {
     before()
     const p = await pickPoints(ctx, 'To midpoint', ['select the point to move from', 'select the first point', 'select the second point'])
+    after()
     if (p) apply(p[1].add(p[2]).multiplyScalar(0.5).sub(p[0]))
   })
   row.append(b1, b2)
