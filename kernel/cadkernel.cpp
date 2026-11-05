@@ -49,6 +49,7 @@
 #include <Quantity_Color.hxx>
 #include <STEPCAFControl_Reader.hxx>
 #include <Standard_Failure.hxx>
+#include <TColStd_HSequenceOfExtendedString.hxx>
 #include <TCollection_AsciiString.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <TDF_Label.hxx>
@@ -58,6 +59,7 @@
 #include <TDocStd_Document.hxx>
 #include <TopAbs.hxx>
 #include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
@@ -267,6 +269,20 @@ Bodies bodiesOf(const TopoDS_Shape& shape) {
     }
   };
   if (!shape.IsNull()) walk(shape);
+  // Next to solids, curve-only leftovers are construction geometry (axes, sketches): leave them out.
+  bool anySolid = false;
+  for (size_t i = 0; i < b.shapes.size(); i++)
+    if (b.shapes[i].ShapeType() == TopAbs_SOLID || b.shapes[i].ShapeType() == TopAbs_SHELL) anySolid = true;
+  if (anySolid) {
+    Bodies kept;
+    for (size_t i = 0; i < b.shapes.size(); i++) {
+      TopExp_Explorer faces(b.shapes[i], TopAbs_FACE);
+      if (!faces.More()) continue;
+      kept.shapes.push_back(b.shapes[i]);
+      kept.solid.push_back(b.solid[i]);
+    }
+    return kept;
+  }
   return b;
 }
 
@@ -794,6 +810,40 @@ class XcafWriter {
 
 }  // namespace
 
+/** A copy of an XCAF document with every placed body as its own top-level shape. */
+Handle(TDocStd_Document) flatten(const Handle(TDocStd_Document)& doc) {
+  Handle(TDocStd_Document) flat = new TDocStd_Document("XmlXCAF");
+  Handle(XCAFDoc_ShapeTool) st = XCAFDoc_DocumentTool::ShapeTool(doc->Main()), fst = XCAFDoc_DocumentTool::ShapeTool(flat->Main());
+  Handle(XCAFDoc_ColorTool) ct = XCAFDoc_DocumentTool::ColorTool(doc->Main()), fct = XCAFDoc_DocumentTool::ColorTool(flat->Main());
+  Handle(XCAFDoc_LayerTool) lt = XCAFDoc_DocumentTool::LayerTool(doc->Main()), flt = XCAFDoc_DocumentTool::LayerTool(flat->Main());
+  fst->SetAutoNaming(false);
+  std::function<void(const TDF_Label&, const TopLoc_Location&)> walk = [&](const TDF_Label& l, const TopLoc_Location& loc) {
+    if (XCAFDoc_ShapeTool::IsAssembly(l)) {
+      TDF_LabelSequence comps;
+      XCAFDoc_ShapeTool::GetComponents(l, comps, false);
+      for (int i = 1; i <= comps.Length(); i++) {
+        TDF_Label ref;
+        XCAFDoc_ShapeTool::GetReferredShape(comps.Value(i), ref);
+        walk(ref, loc * XCAFDoc_ShapeTool::GetLocation(comps.Value(i)));
+      }
+      return;
+    }
+    const TopoDS_Shape s = BRepBuilderAPI_Transform(XCAFDoc_ShapeTool::GetShape(l), loc.Transformation(), true).Shape();
+    const TDF_Label nl = fst->AddShape(s, false);
+    Handle(TDataStd_Name) name;
+    if (l.FindAttribute(TDataStd_Name::GetID(), name)) TDataStd_Name::Set(nl, name->Get());
+    Quantity_Color c;
+    if (ct->GetColor(l, XCAFDoc_ColorGen, c)) fct->SetColor(nl, c, XCAFDoc_ColorGen);
+    Handle(TColStd_HSequenceOfExtendedString) layers;
+    if (lt->GetLayers(l, layers))
+      for (int i = 1; i <= layers->Length(); i++) flt->SetLayer(nl, layers->Value(i));
+  };
+  TDF_LabelSequence free;
+  st->GetFreeShapes(free);
+  for (int i = 1; i <= free.Length(); i++) walk(free.Value(i), TopLoc_Location());
+  return flat;
+}
+
 val writeCad(std::string path, std::string format, val spec, val progressFn) {
   Progress progress{progressFn};
   try {
@@ -840,7 +890,9 @@ val writeCad(std::string path, std::string format, val spec, val progressFn) {
       wr.SetColorMode(true);
       wr.SetNameMode(true);
       wr.SetLayerMode(true);
-      if (!wr.Transfer(w.doc())) throw std::runtime_error("The CAD kernel could not convert the model to IGES");
+      // IGES has no real assemblies, and the writer keeps only one of several
+      // placed copies of a body: write every placed body as its own solid.
+      if (!wr.Transfer(flatten(w.doc()))) throw std::runtime_error("The CAD kernel could not convert the model to IGES");
       if (!wr.Write(path.c_str())) throw std::runtime_error("Could not write the IGES file");
     }
     val res = val::object();
