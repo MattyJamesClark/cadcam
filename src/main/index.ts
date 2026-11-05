@@ -11,7 +11,7 @@ log.initialize()
 // The UI is served from app://bundle/ rather than file:// so that web workers
 // and WebAssembly (the CAD kernel) load like on a normal web origin.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, codeCache: true } }
 ])
 
 function registerAppProtocol(): void {
@@ -38,7 +38,9 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Cache compiled JavaScript so the app opens faster after the first run.
+      v8CacheOptions: 'bypassHeatCheck'
     }
   })
 

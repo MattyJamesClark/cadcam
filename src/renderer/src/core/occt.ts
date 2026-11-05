@@ -46,7 +46,7 @@ const pending = new Map<
 
 function getWorker(): Worker {
   if (worker) return worker
-  worker = new Worker(new URL('vendor/ocjs/worker.mjs', document.baseURI), { type: 'module' })
+  worker = new Worker(new URL('vendor/cadkernel/worker.mjs', document.baseURI), { type: 'module' })
   worker.onmessage = (
     ev: MessageEvent<{ id: number; result?: CadResult; error?: string; stage?: string; done?: number; total?: number }>
   ) => {
@@ -101,7 +101,7 @@ export async function readCadFile(
 // reopen the same files a lot. The result is kept per file content + quality.
 
 /** Bump when the reader's output changes, so stale results aren't reused. */
-const READER_VERSION = 3
+const READER_VERSION = 4
 const CACHE_ENTRIES = 24
 
 async function cacheKey(data: ArrayBuffer, format: string, quality: string): Promise<string | null> {

@@ -62,6 +62,8 @@ export class Shell {
   private treeView: 'tree' | 'layers' = store.get(VIEW_KEY) === 'layers' ? 'layers' : 'tree'
   private openLayers = new Set<string>()
   private measureCache = { key: '', value: null as Measure | null }
+  /** Tree rows from the last render, so selection changes only restyle rows. */
+  private rowsById = new Map<string, HTMLElement[]>()
   private statusTimer = 0
 
   constructor(root: HTMLElement, modules: CadModule[]) {
@@ -249,6 +251,7 @@ export class Shell {
     const render = (): void => {
       const tree = this.els.tree
       tree.innerHTML = ''
+      this.rowsById.clear()
       this.els.docName.textContent = this.doc.name
       if (this.doc.isEmpty()) {
         tree.append(h('li', 'tree-empty', 'Nothing here yet. Import a file or add a shape from the Home tab.'))
@@ -306,6 +309,7 @@ export class Shell {
           this.renameInline(label, n.id)
         })
         tree.append(li)
+        this.rowsById.set(n.id, [li])
         if (n.expanded) n.children.forEach((c) => row(c, depth + 1))
       }
       this.doc.roots.forEach((r) => row(r, 0))
@@ -316,8 +320,13 @@ export class Shell {
       this.renderProps()
       this.refreshRibbon()
     })
-    this.doc.on('selection', () => {
-      render()
+    this.doc.on('selection', (ids) => {
+      // Fast path: every selected row is already on screen, so just restyle.
+      if (this.treeView === 'tree' && ids.every((id) => this.rowsById.has(id))) {
+        const sel = new Set(ids)
+        for (const [id, rows] of this.rowsById) for (const r of rows) r.classList.toggle('selected', sel.has(id))
+        this.els.tree.querySelector('.selected')?.scrollIntoView({ block: 'nearest' })
+      } else render()
       this.renderProps()
       this.refreshRibbon()
     })

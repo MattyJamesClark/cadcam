@@ -6,6 +6,13 @@ import { featureEdges } from './edges'
 import { effectiveTheme, settings, type Settings } from './settings'
 import { AxisTriad } from './triad'
 import { ViewCube } from './viewcube'
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh'
+
+// Picking (selection, rotate-about-cursor) uses a bounding volume hierarchy per
+// geometry, so it stays instant on models with millions of triangles.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree
+THREE.Mesh.prototype.raycast = acceleratedRaycast
 
 export type Projection = 'perspective' | 'orthographic'
 export type DisplayMode = 'shaded' | 'shaded-edges' | 'hidden-removed' | 'wireframe'
@@ -97,6 +104,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     doc.on('changed', () => {
       this.applyDisplayMode()
       this.updatePlaneSize()
+      this.scheduleBoundsTrees()
       this.requestRender()
     })
     doc.on('selection', () => {
@@ -348,9 +356,28 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.raycaster.setFromCamera(ndc, this.camera)
     // Lines (wireframe geometry) are picked within a few pixels.
     this.raycaster.params.Line.threshold = this.nav.pose.dist * 0.006
+    this.raycaster.firstHitOnly = true
+    this.buildBoundsTrees()
     return this.raycaster
       .intersectObject(this.doc.root, true)
       .find((h) => isVisible(h.object) && h.object.name !== EDGE_TAG)
+  }
+
+  /** Build picking acceleration for any mesh that doesn't have it yet. */
+  private buildBoundsTrees(): void {
+    this.doc.root.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (!mesh.isMesh || o.name === EDGE_TAG) return
+      const geo = mesh.geometry
+      if (!geo.boundsTree && geo.index && geo.index.count >= 3) geo.computeBoundsTree({ indirect: true })
+    })
+  }
+
+  private bvhTimer = 0
+  /** After an import, build picking acceleration while the app is idle. */
+  private scheduleBoundsTrees(): void {
+    cancelIdleCallback(this.bvhTimer)
+    this.bvhTimer = requestIdleCallback(() => this.buildBoundsTrees(), { timeout: 2000 })
   }
 
   private bindPointer(): void {

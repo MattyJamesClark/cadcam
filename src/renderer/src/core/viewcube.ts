@@ -52,12 +52,17 @@ export class ViewCube {
 
   setVisible(v: boolean): void {
     this.renderer.domElement.style.display = v ? '' : 'none'
+    this.drawnOnce = false
   }
 
   render(main: THREE.Camera): void {
+    // Only redraw when the view actually turned (panning/zooming don't change it).
+    if (this.lastQuat.equals(main.quaternion) && this.drawnOnce) return
+    this.drawnOnce = true
     this.lastQuat.copy(main.quaternion)
     this.draw()
   }
+  private drawnOnce = false
 
   private draw(): void {
     const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.lastQuat)

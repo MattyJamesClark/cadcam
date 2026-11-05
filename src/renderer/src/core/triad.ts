@@ -78,10 +78,14 @@ export class AxisTriad {
 
   setVisible(v: boolean): void {
     this.el.style.display = v ? '' : 'none'
+    this.drawnOnce = false
   }
 
+  private drawnOnce = false
   render(main: THREE.Camera): void {
     if (this.el.style.display === 'none') return
+    if (this.quat.equals(main.quaternion) && this.drawnOnce) return
+    this.drawnOnce = true
     this.quat.copy(main.quaternion)
     this.camera.position.set(0, 0, 5).applyQuaternion(this.quat)
     this.camera.quaternion.copy(this.quat)
