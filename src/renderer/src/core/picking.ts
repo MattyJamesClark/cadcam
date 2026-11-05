@@ -42,7 +42,7 @@ export function rowMajor(m: THREE.Matrix4): number[] {
   return [e[0], e[4], e[8], e[12], e[1], e[5], e[9], e[13], e[2], e[6], e[10], e[14]]
 }
 
-const VERTEX_PX = 10
+const VERTEX_PX = 8
 const EDGE_PX = 7
 
 /** Finds the face / edge / vertex under the pointer, honouring the select filter. */

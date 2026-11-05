@@ -153,6 +153,7 @@ export class Shell {
     this.bindShortcuts()
     this.bindDocument()
     this.bindUpdates()
+    for (const m of this.modules) m.init?.(this.ctx)
 
     const saved = safeGet(TAB_KEY)
     this.activate(this.modules.find((m) => m.id === saved) ?? this.modules[0])

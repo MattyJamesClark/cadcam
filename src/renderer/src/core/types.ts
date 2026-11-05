@@ -50,6 +50,8 @@ export interface CadModule {
   groups: CommandGroup[]
   /** If set, the tab shows this note instead of commands (module not built yet). */
   planned?: string
+  /** Called once at startup, for always-on behaviour (e.g. hover info). */
+  init?(ctx: ModuleContext): void
   activate?(ctx: ModuleContext): void
   deactivate?(ctx: ModuleContext): void
 }

@@ -2,6 +2,7 @@ import type { CadModule, Command, ModuleContext } from '@/core/types'
 import { icons } from '@/core/icons'
 import { selectFilter, type SelectFilter } from '@/core/picking'
 import { closeMeasure, isMeasuring, openMeasure } from '@/core/measure'
+import { hoverInfoEnabled, setHoverInfo, startHoverInfo } from '@/core/hoverinfo'
 import { closeBoundingBox, isBoundingBoxOpen, openBoundingBox } from '@/core/bbox'
 
 /**
@@ -26,6 +27,7 @@ export const queryModule: CadModule = {
   id: 'query',
   title: 'Query',
   order: 5,
+  init: (ctx) => startHoverInfo(ctx),
   groups: [
     {
       label: 'Measure',
@@ -59,6 +61,22 @@ export const queryModule: CadModule = {
         filterCommand('edge', 'Edges', icons.pickEdge),
         filterCommand('face', 'Faces', icons.pickFace),
         filterCommand('body', 'Bodies', icons.pickBody)
+      ]
+    },
+    {
+      label: 'Dynamic',
+      commands: [
+        {
+          id: 'query.hover-info',
+          label: 'Hover info',
+          icon: icons.pickFace,
+          tooltip: 'Highlight faces, edges and points under the pointer and show their size (click to pin)',
+          isActive: () => hoverInfoEnabled(),
+          run: (ctx) => {
+            setHoverInfo(!hoverInfoEnabled())
+            ctx.refreshRibbon()
+          }
+        }
       ]
     }
   ]
