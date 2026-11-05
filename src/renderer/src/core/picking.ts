@@ -65,6 +65,8 @@ export interface Pick {
   index: number
   /** World point: the vertex, or where the pointer hit. */
   point: THREE.Vector3
+  /** For kind 'point' on CAD bodies: which snap point it is. */
+  snap?: SnapKind
 }
 
 export const pickKey = (p: Pick): string => `${p.object.uuid}:${p.kind}:${p.index}:${p.kind === 'point' ? p.point.toArray().join(',') : ''}`
@@ -119,6 +121,21 @@ export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f:
           bestIndex = i
         }
       }
+      // Circle / arc centres and quadrants, line midpoints.
+      const snaps = snapPoints(geo)
+      let bestSnap = -1
+      for (let i = 0; i < snaps.kinds.length; i++) {
+        const { s, w } = screenOf(snaps.points[i * 3], snaps.points[i * 3 + 1], snaps.points[i * 3 + 2])
+        const d = s.distanceTo(mouse)
+        // Centres sit in the air: a hole's own wall may be in front of them.
+        // A quadrant wins over a B-rep vertex at the same spot (a circle's seam).
+        if (d < bestD + (bestIndex >= 0 ? 1 : 0) && (snaps.kinds[i] === 'centre' || depth(w) <= hitDepth)) {
+          bestD = d
+          best = w
+          bestSnap = i
+        }
+      }
+      if (best && bestSnap >= 0) return { kind: 'point', object: obj, index: -1, point: best, snap: snaps.kinds[bestSnap] }
       if (best) return { kind: 'vertex', object: obj, index: bestIndex, point: best }
     } else if (!brep && hit.face) {
       // Plain mesh: snap to a corner of the triangle under the pointer.
@@ -266,4 +283,109 @@ function build(pick: Pick, color: number): THREE.Object3D {
   const m = new THREE.Mesh(geo, mat)
   m.userData.shared = true
   return m
+}
+
+export type SnapKind = 'centre' | 'quadrant' | 'mid'
+
+/**
+ * Snap points of a CAD body, from its edges (cached on the geometry, in its
+ * own coordinates): the centre and the 4 quadrant points of every circle and
+ * arc (those on the arc), and the midpoint of every straight edge.
+ */
+export function snapPoints(geo: THREE.BufferGeometry): { points: Float32Array; kinds: SnapKind[] } {
+  const cached = geo.userData.snaps as { points: Float32Array; kinds: SnapKind[] } | undefined
+  if (cached) return cached
+  const out: number[] = []
+  const kinds: SnapKind[] = []
+  const segs = geo.userData.edgePositions as Float32Array | undefined
+  const ranges = geo.userData.edgeRanges as Uint32Array | undefined
+  if (segs && ranges) {
+    const at = (i: number): THREE.Vector3 => new THREE.Vector3(segs[i], segs[i + 1], segs[i + 2])
+    // Lines joining two full circles are cylinder seams, not real edges: no midpoint.
+    const lines: [THREE.Vector3, THREE.Vector3][] = []
+    const seamEnds: THREE.Vector3[] = []
+    for (let k = 0; k < ranges.length / 2; k++) {
+      const first = ranges[k * 2]
+      const count = ranges[k * 2 + 1]
+      if (!count) continue
+      const pts: THREE.Vector3[] = [at(first * 6)]
+      for (let j = 0; j < count; j++) pts.push(at((first + j) * 6 + 3))
+      if (count === 1) {
+        lines.push([pts[0], pts[1]])
+        continue
+      }
+      const circle = fitCircle(pts)
+      if (!circle) continue
+      const { c, n, r, closed } = circle
+      if (closed) seamEnds.push(pts[0])
+      out.push(c.x, c.y, c.z)
+      kinds.push('centre')
+      // Quadrants measured from world X (or Y when X is along the axis).
+      const u = Math.abs(n.x) > 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
+      u.sub(n.clone().multiplyScalar(u.dot(n))).normalize()
+      const v = new THREE.Vector3().crossVectors(n, u)
+      for (let q = 0; q < 4; q++) {
+        const a = (q * Math.PI) / 2
+        const p = c.clone().add(u.clone().multiplyScalar(r * Math.cos(a))).add(v.clone().multiplyScalar(r * Math.sin(a)))
+        if (!closed && !onPolyline(p, pts, r * 0.02 + 1e-6)) continue
+        out.push(p.x, p.y, p.z)
+        kinds.push('quadrant')
+      }
+    }
+    const isSeamEnd = (p: THREE.Vector3): boolean => seamEnds.some((q) => q.distanceToSquared(p) < 1e-10 * (1 + p.lengthSq()))
+    for (const [a, b] of lines) {
+      if (isSeamEnd(a) && isSeamEnd(b)) continue
+      out.push(...a.clone().add(b).multiplyScalar(0.5).toArray())
+      kinds.push('mid')
+    }
+  }
+  const res = { points: new Float32Array(out), kinds }
+  geo.userData.snaps = res
+  return res
+}
+
+/** Is this polyline a circle or an arc? Centre, axis, radius, and whether it closes. */
+function fitCircle(pts: THREE.Vector3[]): { c: THREE.Vector3; n: THREE.Vector3; r: number; closed: boolean } | null {
+  const last = pts[pts.length - 1]
+  const len = pts.reduce((s, p, i) => (i ? s + p.distanceTo(pts[i - 1]) : 0), 0)
+  if (len <= 0) return null
+  const closed = pts[0].distanceTo(last) < len * 1e-4
+  const m = pts.length - (closed ? 1 : 0)
+  if (m < 3) return null
+  const a = pts[0]
+  const b = pts[Math.floor(m / 3)]
+  const d = closed ? pts[Math.floor((2 * m) / 3)] : last
+  const ab = b.clone().sub(a)
+  const ad = d.clone().sub(a)
+  const n = new THREE.Vector3().crossVectors(ab, ad)
+  const n2 = n.lengthSq()
+  if (n2 < 1e-20) return null
+  // Circumcentre of a, b, d.
+  const c = a
+    .clone()
+    .add(
+      new THREE.Vector3()
+        .crossVectors(n, ab)
+        .multiplyScalar(ad.lengthSq())
+        .add(new THREE.Vector3().crossVectors(ad, n).multiplyScalar(ab.lengthSq()))
+        .divideScalar(2 * n2)
+    )
+  const r = c.distanceTo(a)
+  if (!isFinite(r) || r <= 0) return null
+  n.normalize()
+  for (const p of pts) {
+    if (Math.abs(p.distanceTo(c) - r) > r * 0.01 + 1e-6) return null
+    if (Math.abs(p.clone().sub(c).dot(n)) > r * 0.01 + 1e-6) return null
+  }
+  return { c, n, r, closed }
+}
+
+function onPolyline(p: THREE.Vector3, pts: THREE.Vector3[], tol: number): boolean {
+  const line = new THREE.Line3()
+  const q = new THREE.Vector3()
+  for (let i = 1; i < pts.length; i++) {
+    line.set(pts[i - 1], pts[i])
+    if (line.closestPointToPoint(p, true, q).distanceTo(p) <= tol) return true
+  }
+  return false
 }

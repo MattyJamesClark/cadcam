@@ -82,7 +82,7 @@ class HoverInfo {
     if (hit !== undefined) return hit
     let text = ''
     const geo = (p.object as THREE.Mesh).geometry
-    if (p.kind === 'point') text = `Point  ${fmt(p.point.x)}, ${fmt(p.point.y)}, ${fmt(p.point.z)}`
+    if (p.kind === 'point') text = `${p.snap === 'centre' ? 'Centre' : p.snap === 'quadrant' ? 'Quadrant' : p.snap === 'mid' ? 'Midpoint' : 'Point'}  ${fmt(p.point.x)}, ${fmt(p.point.y)}, ${fmt(p.point.z)}`
     else if (geo?.userData.brep && p.kind !== 'body') {
       try {
         p.object.updateMatrixWorld()
