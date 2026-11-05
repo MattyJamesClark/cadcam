@@ -52,14 +52,20 @@ jobs:
           v="$base.${{ github.run_number }}"
           npm version "$v" --no-git-tag-version
           echo "version=$v" >> "$GITHUB_OUTPUT"
-      # Upload the installer to a draft release first, then publish it, so the
-      # updater never sees a release without its files.
-      - name: Build and upload
-        run: npm run release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Build on the runner, then create the release in one call with every
+      # file attached, so the updater never sees a half-uploaded release.
+      - name: Build installer
+        run: npm run dist
       - name: Publish release
         shell: bash
-        run: gh release edit "v${{ steps.version.outputs.version }}" --draft=false --latest --target "$GITHUB_SHA"
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          ls dist
+          test -f dist/latest.yml
+          gh release create "v$v" \
+            "dist/CADCAM-Studio-Setup-$v.exe" \
+            "dist/CADCAM-Studio-Setup-$v.exe.blockmap" \
+            dist/latest.yml \
+            --target "$GITHUB_SHA" --title "v$v" --generate-notes --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

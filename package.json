@@ -13,7 +13,7 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "npm run build && electron-builder --win --config electron-builder.config.cjs --publish never",
-    "release": "npm run build && electron-builder --win --config electron-builder.config.cjs --publish always"
+    "release": "npm run dist"
   },
   "dependencies": {
     "electron-log": "^5.4.3",

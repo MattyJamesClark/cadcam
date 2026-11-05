@@ -19,6 +19,6 @@ module.exports = {
     provider: 'github',
     owner: process.env.RELEASE_OWNER || 'MattyJamesClark',
     repo: process.env.RELEASE_REPO || 'cadcam',
-    releaseType: 'draft'
+    releaseType: 'release'
   }
 }
