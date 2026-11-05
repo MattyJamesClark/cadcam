@@ -7,6 +7,8 @@ module.exports = {
   productName: 'CADCAM Studio',
   directories: { buildResources: 'build', output: 'dist' },
   files: ['out/**/*', 'package.json'],
+  // OpenCascade (the CAD kernel) is LGPL 2.1 with an exception: ship its licence.
+  extraResources: [{ from: 'kernel/licenses', to: 'licenses' }],
   win: { icon: 'build/icon.ico', target: [{ target: 'nsis', arch: ['x64'] }], artifactName: 'CADCAM-Studio-Setup-${version}.${ext}' },
   nsis: {
     oneClick: false,

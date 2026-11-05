@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import log from 'electron-log/main'
@@ -96,7 +96,7 @@ function registerIpc(): void {
       const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
       const res = await dialog.showSaveDialog(win!, { defaultPath: defaultName, filters })
       if (res.canceled || !res.filePath) return null
-      await writeFile(res.filePath, data)
+      await safeWrite(res.filePath, data)
       writablePaths.add(res.filePath)
       return res.filePath
     }
@@ -106,9 +106,24 @@ function registerIpc(): void {
   // user never picked are refused, so the UI can't write anywhere else.
   ipcMain.handle(IPC.writeFile, async (_e, path: string, data: Uint8Array): Promise<boolean> => {
     if (!writablePaths.has(path)) return false
-    await writeFile(path, data)
+    await safeWrite(path, data)
     return true
   })
+}
+
+/**
+ * Write to a temporary file beside the target, then rename it over the target,
+ * so a crash or full disk mid-save leaves the old file intact, never half of one.
+ */
+async function safeWrite(path: string, data: Uint8Array): Promise<void> {
+  const tmp = `${path}.${process.pid}.tmp`
+  try {
+    await writeFile(tmp, data, { flush: true })
+    await rename(tmp, path)
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => undefined)
+    throw e
+  }
 }
 
 if (!app.requestSingleInstanceLock()) {
