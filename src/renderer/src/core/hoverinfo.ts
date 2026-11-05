@@ -1,13 +1,13 @@
 import type { ModuleContext } from './types'
 import { measureCad } from './occt'
-import { Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
+import { pickKey, rowMajor, type Pick } from './picking'
+import { selection } from './selection'
 import { el, fmt } from './toolpanel'
 import type * as THREE from 'three'
 
 /**
- * Dynamic selection: with no tool running, the face / edge / point under the
- * pointer lights up with a small label (radius, diameter, length...). A click
- * pins the label so it stays while you look around.
+ * Hover info: with no tool running, the face / edge / point under the
+ * pointer gets a small label (radius, diameter, length...).
  */
 
 const KEY = 'cadcam.hoverInfo'
@@ -29,115 +29,44 @@ export function startHoverInfo(ctx: ModuleContext): void {
   instance ??= new HoverInfo(ctx)
 }
 
-const FILTER = { vertex: true, edge: true, face: true, body: false }
-const HOVER = 0xfff1a8
-const PINNED = 0xff9f1c
-
+/** Label beside the pointer; the highlight itself is drawn by the selection. */
 class HoverInfo {
-  private hl: Highlights
   private hover: Pick | null = null
-  private pinned: Pick | null = null
   private label = el('div', 'hover-label')
-  private pinLabel = el('div', 'dim-label pin-label')
   private cache = new Map<string, string>()
-  private queued: PointerEvent | null = null
   private lastXY = { x: 0, y: 0 }
 
   constructor(private ctx: ModuleContext) {
-    const vp = ctx.viewport
-    this.hl = new Highlights(vp)
-    this.label.hidden = this.pinLabel.hidden = true
-    vp.host.append(this.label, this.pinLabel)
-    const canvas = vp.renderer.domElement
-    let down: { x: number; y: number } | null = null
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button === 0) down = { x: e.clientX, y: e.clientY }
-    })
-    canvas.addEventListener('pointerup', (e) => {
-      if (e.button !== 0 || !down) return
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
-      down = null
-      if (moved > 4 || !this.active()) return
-      this.pinned = this.hover
-      void this.refresh()
-    })
-    canvas.addEventListener('pointermove', (e) => {
-      const first = !this.queued
-      this.queued = e
-      if (!first) return
-      requestAnimationFrame(() => {
-        const ev = this.queued!
-        this.queued = null
-        this.move(ev)
-      })
-    })
-    canvas.addEventListener('pointerleave', () => {
-      this.hover = null
-      void this.refresh()
-    })
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.pinned && this.active()) {
-        this.pinned = null
-        void this.refresh()
-      }
+    this.label.hidden = true
+    ctx.viewport.host.append(this.label)
+    selection.on('hover', ({ pick, x, y }) => {
+      this.lastXY = { x, y }
+      const changed = (pick && pickKey(pick)) !== (this.hover && pickKey(this.hover))
+      this.hover = pick
+      if (changed) void this.refresh()
+      else this.placeHover()
     })
     // The model changed: labels may be stale.
     ctx.doc.history.on('changed', () => {
       this.cache.clear()
       this.clear(true)
     })
-    vp.afterRender.add(() => this.placePin())
   }
 
-  /** Off while a tool (Measure, Translate...) owns the mouse. */
-  private active(): boolean {
-    return enabled && !this.ctx.viewport.blockPick
-  }
-
-  private move(e: PointerEvent): void {
-    this.lastXY = { x: e.clientX, y: e.clientY }
-    if (!this.active() || e.buttons) {
-      if (this.hover || this.pinned) this.clear(!this.active())
-      return
-    }
-    const h = pickAt(this.ctx.viewport, e, FILTER)
-    const changed = (h && pickKey(h)) !== (this.hover && pickKey(this.hover))
-    this.hover = h
-    if (changed) void this.refresh()
-    else this.placeHover()
-  }
-
-  clear(all: boolean): void {
+  clear(_all: boolean): void {
     this.hover = null
-    if (all) this.pinned = null
     void this.refresh()
   }
 
   private async refresh(): Promise<void> {
-    const list: { pick: Pick; color: number }[] = []
-    if (this.pinned) list.push({ pick: this.pinned, color: PINNED })
-    if (this.hover && (!this.pinned || pickKey(this.hover) !== pickKey(this.pinned))) list.push({ pick: this.hover, color: HOVER })
-    this.hl.set(list)
-
     const hover = this.hover
     this.label.hidden = true
-    if (hover && (!this.pinned || pickKey(hover) !== pickKey(this.pinned))) {
-      const text = await this.textOf(hover)
-      if (hover === this.hover && text) {
-        this.label.textContent = text
-        this.label.hidden = false
-        this.placeHover()
-      }
-    }
-    const pin = this.pinned
-    if (!pin) this.pinLabel.hidden = true
-    else {
-      const text = await this.textOf(pin)
-      if (pin === this.pinned && text) {
-        this.pinLabel.textContent = text
-        this.pinLabel.hidden = false
-        this.placePin()
-      }
+    if (!hover || !enabled || hover.kind === 'body') return
+    const text = await this.textOf(hover)
+    if (hover === this.hover && text) {
+      this.label.textContent = text
+      this.label.hidden = false
+      this.placeHover()
     }
   }
 
@@ -145,13 +74,6 @@ class HoverInfo {
     const r = this.ctx.viewport.host.getBoundingClientRect()
     this.label.style.left = `${this.lastXY.x - r.left + 14}px`
     this.label.style.top = `${this.lastXY.y - r.top + 16}px`
-  }
-
-  private placePin(): void {
-    if (!this.pinned || this.pinLabel.hidden) return
-    const s = this.ctx.viewport.toScreen(this.pinned.point)
-    this.pinLabel.style.left = `${s.x}px`
-    this.pinLabel.style.top = `${s.y}px`
   }
 
   private async textOf(p: Pick): Promise<string> {

@@ -2,24 +2,57 @@ import * as THREE from 'three'
 import { Emitter } from './events'
 import type { Viewport } from './viewport'
 
-/** What a click in the viewport picks (Query > Select). Several can be on; the most precise wins. */
+/**
+ * What a click in the viewport can pick (the selection filter on the bottom
+ * bar). Several can be on; the most precise wins: point, then edge, then face,
+ * then the whole body. Bodies are solids; surfaces are sheet (open) bodies.
+ */
 export interface SelectFilter {
   vertex: boolean
   edge: boolean
   face: boolean
+  surface: boolean
   body: boolean
 }
+export const FILTER_KEYS: (keyof SelectFilter)[] = ['vertex', 'edge', 'face', 'surface', 'body']
+export const EVERYTHING: SelectFilter = { vertex: true, edge: true, face: true, surface: true, body: true }
+const FILTER_KEY = 'cadcam.selectFilter'
 
 class FilterState extends Emitter<{ changed: SelectFilter }> {
-  value: SelectFilter = { vertex: true, edge: true, face: true, body: false }
+  value: SelectFilter = load()
   toggle(k: keyof SelectFilter): void {
-    this.value = { ...this.value, [k]: !this.value[k] }
+    const next = { ...this.value, [k]: !this.value[k] }
     // Keep at least one on.
-    if (!Object.values(this.value).some(Boolean)) this.value[k] = true
+    if (!Object.values(next).some(Boolean)) return
+    this.set(next)
+  }
+  set(v: SelectFilter): void {
+    this.value = { ...v }
+    try {
+      localStorage.setItem(FILTER_KEY, JSON.stringify(this.value))
+    } catch {
+      /* ignore */
+    }
     this.emit('changed', this.value)
   }
+  isEverything(): boolean {
+    return FILTER_KEYS.every((k) => this.value[k])
+  }
+}
+function load(): SelectFilter {
+  try {
+    const v = JSON.parse(localStorage.getItem(FILTER_KEY) ?? 'null') as Partial<SelectFilter> | null
+    if (v && FILTER_KEYS.some((k) => v[k])) return { ...EVERYTHING, ...v }
+  } catch {
+    /* ignore */
+  }
+  return { ...EVERYTHING }
 }
 export const selectFilter = new FilterState()
+
+/** Is this body object a sheet (open surface) body rather than a solid? */
+export const isSheet = (o: THREE.Object3D): boolean =>
+  o.userData.cadKind === 'body' && o.userData.solid === false && !(o as THREE.LineSegments).isLineSegments
 
 export type PickKind = 'body' | 'face' | 'edge' | 'vertex' | 'point'
 
@@ -46,7 +79,8 @@ const VERTEX_PX = 8
 const EDGE_PX = 7
 
 /** Finds the face / edge / vertex under the pointer, honouring the select filter. */
-export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, filter = selectFilter.value): Pick | null {
+export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f: Partial<SelectFilter> = selectFilter.value): Pick | null {
+  const filter: SelectFilter = { vertex: !!f.vertex, edge: !!f.edge, face: !!f.face, surface: !!f.surface, body: !!f.body }
   const hit = vp.hitTest(vp.ndcOf(e))
   if (!hit) return null
   const obj = hit.object
@@ -139,10 +173,13 @@ export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, fi
     const triFace = geo.userData.triFace as Int32Array | undefined
     if (triFace && hit.faceIndex != null && triFace[hit.faceIndex] >= 0)
       return { kind: 'face', object: obj, index: triFace[hit.faceIndex], point: hit.point.clone() }
-    if (!brep && !filter.body) return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
+    // A plain mesh has no faces of its own: the face filter picks the whole mesh.
+    if (!brep) return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
   }
 
-  if (filter.body || (isWire && !geo.userData.edgeRanges)) return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
+  const sheet = isSheet(obj)
+  if ((sheet ? filter.surface : filter.body) || (isWire && !geo.userData.edgeRanges && (filter.body || filter.edge)))
+    return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
   return null
 }
 

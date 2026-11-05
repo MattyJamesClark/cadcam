@@ -114,7 +114,7 @@ class MeasureTool {
     this.body.replaceChildren()
     // Select filter (same as Query > Select).
     const filter = el('div', 'tool-filter')
-    const names: [keyof SelectFilter, string][] = [['vertex', 'Points'], ['edge', 'Edges'], ['face', 'Faces'], ['body', 'Bodies']]
+    const names: [keyof SelectFilter, string][] = [['vertex', 'Points'], ['edge', 'Edges'], ['face', 'Faces'], ['surface', 'Surfaces'], ['body', 'Bodies']]
     for (const [k, label] of names) {
       const b = el('button', selectFilter.value[k] ? 'on' : '', label)
       b.title = `Pick ${label.toLowerCase()}`

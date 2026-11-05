@@ -1,6 +1,5 @@
 import type { CadModule, Command, ModuleContext } from '@/core/types'
 import { icons } from '@/core/icons'
-import { selectFilter, type SelectFilter } from '@/core/picking'
 import { closeMeasure, isMeasuring, openMeasure } from '@/core/measure'
 import { hoverInfoEnabled, setHoverInfo, startHoverInfo } from '@/core/hoverinfo'
 import { closeDimensionTool, dimToolKind, openDimensionTool, type DimKind } from '@/core/dimtool'
@@ -22,18 +21,6 @@ const dimCommand = (kind: DimKind, label: string, icon: string, tooltip: string,
   isEnabled: (ctx) => !ctx.doc.isEmpty(),
   isActive: () => dimToolKind() === kind,
   run: (ctx) => (dimToolKind() === kind ? closeDimensionTool() : openDimensionTool(ctx, kind))
-})
-
-const filterCommand = (key: keyof SelectFilter, label: string, icon: string): Command => ({
-  id: `query.select.${key}`,
-  label,
-  icon,
-  tooltip: `Pick ${label.toLowerCase()} when measuring`,
-  isActive: () => selectFilter.value[key],
-  run: (ctx: ModuleContext) => {
-    selectFilter.toggle(key)
-    ctx.refreshRibbon()
-  }
 })
 
 export const queryModule: CadModule = {
@@ -91,22 +78,13 @@ export const queryModule: CadModule = {
       ]
     },
     {
-      label: 'Select',
-      commands: [
-        filterCommand('vertex', 'Points', icons.pickPoint),
-        filterCommand('edge', 'Edges', icons.pickEdge),
-        filterCommand('face', 'Faces', icons.pickFace),
-        filterCommand('body', 'Bodies', icons.pickBody)
-      ]
-    },
-    {
       label: 'Dynamic',
       commands: [
         {
           id: 'query.hover-info',
           label: 'Hover info',
           icon: icons.pickFace,
-          tooltip: 'Highlight faces, edges and points under the pointer and show their size (click to pin)',
+          tooltip: 'Show the size of the face, edge or point under the pointer',
           isActive: () => hoverInfoEnabled(),
           run: (ctx) => {
             setHoverInfo(!hoverInfoEnabled())

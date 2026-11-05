@@ -123,10 +123,10 @@ class DimensionTool {
   }
 
   /** What a click can pick, for this kind of dimension. */
-  private filter(): { vertex: boolean; edge: boolean; face: boolean; body: boolean } {
-    if (this.kind === 'size') return { vertex: false, edge: true, face: true, body: false }
-    if (this.kind === 'angle') return { vertex: false, edge: true, face: true, body: false }
-    return { vertex: true, edge: true, face: true, body: false }
+  private filter(): { vertex: boolean; edge: boolean; face: boolean } {
+    if (this.kind === 'size') return { vertex: false, edge: true, face: true }
+    if (this.kind === 'angle') return { vertex: false, edge: true, face: true }
+    return { vertex: true, edge: true, face: true }
   }
 
   setKind(kind: DimKind): void {

@@ -1,3 +1,5 @@
+import { selection } from './selection'
+import { startBottomBar } from './bottombar'
 import * as THREE from 'three'
 import { CadDocument, type DocNode, type Measure } from './document'
 import { icons } from './icons'
@@ -153,6 +155,8 @@ export class Shell {
     this.bindShortcuts()
     this.bindDocument()
     this.bindUpdates()
+    selection.start(this.ctx)
+    startBottomBar(this.ctx)
     for (const m of this.modules) m.init?.(this.ctx)
     let fitQueued = false
     new ResizeObserver(() => {
@@ -691,10 +695,6 @@ export class Shell {
       } else render()
       this.renderProps()
       this.refreshRibbon()
-    })
-    this.viewport.on('pick', ({ id, additive }) => {
-      if (id) this.doc.select([id], additive)
-      else if (!additive) this.doc.select([])
     })
     this.viewport.on('settings', () => this.refreshRibbon())
     this.viewport.on('cursor', (p) => {
