@@ -8,6 +8,7 @@ const { autoUpdater } = electronUpdater
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 
 let lastStatus: UpdateStatus = { state: 'idle' }
+let lastProgressAt = 0
 
 function broadcast(status: UpdateStatus): void {
   lastStatus = status
@@ -40,11 +41,15 @@ export function initUpdater(): void {
   autoUpdater.on('checking-for-update', () => broadcast({ state: 'checking' }))
   autoUpdater.on('update-available', (i) => broadcast({ state: 'available', version: i.version }))
   autoUpdater.on('update-not-available', (i) => broadcast({ state: 'not-available', version: i.version }))
-  autoUpdater.on('download-progress', (p) =>
+  autoUpdater.on('download-progress', (p) => {
+    lastProgressAt = Date.now()
     broadcast({ state: 'downloading', percent: Math.round(p.percent) })
-  )
+  })
   autoUpdater.on('update-downloaded', (i) => broadcast({ state: 'ready', version: i.version }))
-  autoUpdater.on('error', (e) => broadcast({ state: 'error', message: e?.message ?? String(e) }))
+  autoUpdater.on('error', (e) => {
+    log.error('Update error', e)
+    broadcast({ state: 'error', message: e?.message ?? String(e) })
+  })
 
   check()
   setInterval(check, CHECK_INTERVAL_MS)
@@ -52,7 +57,10 @@ export function initUpdater(): void {
 
 async function check(): Promise<void> {
   if (!app.isPackaged) return
-  if (lastStatus.state === 'downloading' || lastStatus.state === 'ready') return
+  // Don't start a second download while one is moving; a download with no
+  // progress for 10 minutes is treated as stuck and started again. A downloaded
+  // update doesn't stop checks either: a newer release replaces it.
+  if (lastStatus.state === 'downloading' && Date.now() - lastProgressAt < 10 * 60 * 1000) return
   try {
     await autoUpdater.checkForUpdates()
   } catch (e) {

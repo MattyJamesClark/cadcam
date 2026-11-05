@@ -525,6 +525,7 @@ export class Shell {
     const info = await host.appInfo()
     this.els.version.textContent = `v${info.version}`
     const pill = this.els.update
+    let manual = false
     const show = (s: UpdateStatus): void => {
       pill.hidden = true
       pill.className = 'update-pill'
@@ -541,10 +542,26 @@ export class Shell {
           pill.onclick = () => host.updates.install()
           this.setStatus(`Version ${s.version} downloaded. Restart when convenient; it also installs when you close the app.`, 'success')
           break
+        case 'not-available':
+          if (manual) this.setStatus(`You're on the latest version (v${info.version}).`, 'success')
+          manual = false
+          break
         case 'error':
           console.warn('Update error:', s.message)
+          pill.hidden = false
+          pill.innerHTML = `${icons.update}<span>Update failed. Click to retry</span>`
+          pill.title = s.message
+          pill.onclick = () => host.updates.check()
           break
       }
+    }
+    // Clicking the version number checks for updates now.
+    this.els.version.style.cursor = 'pointer'
+    this.els.version.title = 'Click to check for updates'
+    this.els.version.onclick = () => {
+      manual = true
+      this.setStatus('Checking for updates…')
+      void host.updates.check()
     }
     host.updates.onStatus(show)
     show(await host.updates.status())
