@@ -66,15 +66,20 @@ jobs:
           echo "$libs" | tr ' ' '\n' | sed 's#.*/##'
           em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
           link() {
-            em++ $FLAGS cadkernel.o $libs -lembind "$@" \
+            em++ -fwasm-exceptions cadkernel.o $libs -lembind "$@" \
               -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel \
               -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sSTACK_SIZE=4MB \
               -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS \
               -o out/cadkernel.js
           }
           # Legacy wasm exceptions first; exnref (Chromium 137+, Electron 36+) if binaryen chokes on it.
-          if link; then echo "EH: legacy" > out/BUILD.txt
-          else link -sWASM_LEGACY_EXCEPTIONS=0 && echo "EH: exnref" > out/BUILD.txt; fi
+          # Objects are already -O3; the link-time wasm-opt pass is a bonus, and some
+          # binaryen versions fail to parse large EH modules, so fall back without it.
+          if link -O3; then echo "EH: legacy, link -O3" > out/BUILD.txt
+          elif link -O3 -sWASM_LEGACY_EXCEPTIONS=0; then echo "EH: exnref, link -O3" > out/BUILD.txt
+          elif link -O0; then echo "EH: legacy, link -O0" > out/BUILD.txt
+          else echo "all links failed"; exit 1; fi
+          cat out/BUILD.txt
           cp occt/LICENSE_LGPL_21.txt out/LICENSE-OCCT.txt 2>/dev/null || cp occt/LICENSE* out/ || true
           ls -la out
       # Commit the built kernel next to its worker on this branch, so it can be
