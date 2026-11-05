@@ -12,6 +12,21 @@ set -euo pipefail
 mkdir -p out extra
 incs=$(for d in occt/src/*/; do printf -- '-I%s ' "$d"; done)
 libs=$(find occt-build -name 'libTK*.a' | sort | tr '\n' ' ')
+# Primitives (box, cylinder, sphere) live in TKPrim, which the cached
+# OpenCascade build may not include: compile its packages directly.
+if ! echo "$libs" | grep -q libTKPrim.a; then
+  mkdir -p prim
+  for pkg in $(cat occt/src/TKPrim/PACKAGES); do
+    for f in occt/src/$pkg/*.cxx; do
+      o="prim/$(basename "${f%.cxx}").o"
+      [ -f "$o" ] || em++ -std=c++17 $FLAGS -DNDEBUG -DNo_Exception $incs -c "$f" -o "$o" &
+      while [ "$(jobs -r | wc -l)" -ge 4 ]; do sleep 0.2; done
+    done
+  done
+  wait
+  emar rcs prim/libTKPrim.a prim/*.o
+  libs="prim/libTKPrim.a $libs"
+fi
 em++ -std=c++17 $FLAGS $incs -c kernel/cadkernel.cpp -o cadkernel.o
 
 common=(-lembind -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCadKernel

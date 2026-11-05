@@ -32,6 +32,10 @@ interface GeoJson {
   index?: BufRef
   groups?: [number, number, number][]
   edges?: BufRef
+  /** Exact B-rep of the body (for STEP / IGES export). */
+  brep?: BufRef
+  /** Quick-shape parameters (exact export of boxes, cylinders, spheres). */
+  prim?: Record<string, unknown>
 }
 interface MatJson {
   type: 'standard' | 'line' | 'points'
@@ -121,6 +125,8 @@ export function saveProject(doc: CadDocument, appVersion?: string): Uint8Array {
     if (g.index) json.index = put(g.index.array)
     if (g.groups.length) json.groups = g.groups.map((gr) => [gr.start, gr.count, gr.materialIndex ?? 0])
     if (g.userData.edgePositions) json.edges = put(g.userData.edgePositions as Float32Array)
+    if (g.userData.brep) json.brep = put(g.userData.brep as Uint8Array)
+    if (g.userData.prim) json.prim = g.userData.prim
     id = geoJson.length
     geoJson.push(json)
     geos.set(g, id)
@@ -243,6 +249,8 @@ export function readProject(data: ArrayBuffer): { name: string; roots: { object:
     if (g.index) geo.setIndex(new THREE.BufferAttribute(arr(g.index) as THREE.TypedArray, 1))
     for (const [start, count, mi] of g.groups ?? []) geo.addGroup(start, count, mi)
     if (g.edges) geo.userData.edgePositions = arr(g.edges)
+    if (g.brep) geo.userData.brep = arr(g.brep)
+    if (g.prim) geo.userData.prim = g.prim
     if (!geo.getAttribute('normal') && g.index) geo.computeVertexNormals()
     return geo
   })

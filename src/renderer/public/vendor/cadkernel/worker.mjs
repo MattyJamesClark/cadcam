@@ -1,7 +1,8 @@
 /* CAD kernel worker (module). Loads OpenCascade (WebAssembly, built from
  * kernel/cadkernel.cpp) once and reads STEP / IGES / BREP files with names,
  * colours, layers, assemblies and STEP product data.
- * Message in:  { id, format, buffer, quality }
+ * Message in:  { id, format, buffer, quality }           (read)
+ *              { id, op: 'write', format, spec }        (write; result is { bytes, skipped, faceted })
  * Message out: { id, stage, done, total } (progress) | { id, result } | { id, error } */
 import createCadKernel from './cadkernel.js'
 import { readStepInfo } from './step-info.mjs'
@@ -25,9 +26,29 @@ function attachProps(node, products) {
   for (const c of node.children) attachProps(c, products)
 }
 
+async function write(id, format, spec) {
+  const k = await kernel()
+  const path = '/export.' + format
+  let last = 0
+  try {
+    const res = k.writeCad(path, format, spec, (stage, done, total) => {
+      const now = Date.now()
+      if (done && done !== total && now - last < 150) return
+      last = now
+      postMessage({ id, stage, done, total })
+    })
+    if (res.error) throw new Error(res.error)
+    const bytes = k.FS.readFile(path)
+    postMessage({ id, result: { bytes, skipped: res.skipped, faceted: res.faceted } }, [bytes.buffer])
+  } finally {
+    try { k.FS.unlink(path) } catch { /* ignore */ }
+  }
+}
+
 onmessage = async (ev) => {
   const { id, format, buffer, quality } = ev.data
   try {
+    if (ev.data.op === 'write') return await write(id, format, ev.data.spec)
     const k = await kernel()
     const bytes = new Uint8Array(buffer)
     const q = QUALITY[quality] || QUALITY.normal
@@ -54,7 +75,10 @@ onmessage = async (ev) => {
       }
     } else attachProps(result.root, new Map())
     const transfer = []
-    for (const m of result.meshes) transfer.push(m.position.buffer, m.index.buffer, m.edges.buffer)
+    for (const m of result.meshes) {
+      transfer.push(m.position.buffer, m.index.buffer, m.edges.buffer)
+      if (m.brep) transfer.push(m.brep.buffer)
+    }
     postMessage({ id, result }, transfer)
   } catch (e) {
     postMessage({ id, error: String((e && e.message) || e) })

@@ -20,7 +20,9 @@ export interface Importer {
 export interface Exporter {
   name: string
   extension: string
-  write(root: THREE.Object3D): Promise<Uint8Array>
+  write(root: THREE.Object3D, progress?: (stage: string, done?: number, total?: number) => void): Promise<Uint8Array>
+  /** Anything the user should know about the last export (e.g. items left out). */
+  lastNote?: string
 }
 
 const importers: Importer[] = []
