@@ -4,7 +4,7 @@ import type { Dimension } from './document'
 import { datums } from './datums'
 import { measureCad } from './occt'
 import { Highlights, pickAt, pickKey, rowMajor, type Pick } from './picking'
-import { el, fmt, segmented, toolPanel } from './toolpanel'
+import { el, fmt } from './toolpanel'
 
 /**
  * Dimension tool: pick model items and leave a dimension in the document
@@ -45,10 +45,8 @@ class DimensionTool {
   private picks: Pick[] = []
   private hover: Pick | null = null
   private hl: Highlights
-  private panel: HTMLElement
-  private body: HTMLElement
-  private sub: HTMLElement
-  private note = el('div', 'tool-empty')
+  private prompt = el('div', 'vp-prompt')
+  private flash: string | null = null
   private off: (() => void)[] = []
   private busy = false
   private axis: 'true' | 'x' | 'y' | 'z' = 'true'
@@ -63,13 +61,9 @@ class DimensionTool {
   ) {
     const vp = ctx.viewport
     this.hl = new Highlights(vp)
-    const p = toolPanel('Dimension', () => this.close())
-    this.panel = p.panel
-    this.body = p.body
-    this.sub = p.sub
-    vp.host.appendChild(this.panel)
+    vp.host.appendChild(this.prompt)
     vp.blockPick = () => true
-    this.build()
+    this.showPrompt()
 
     const canvas = vp.renderer.domElement
     let down: { x: number; y: number } | null = null
@@ -131,69 +125,43 @@ class DimensionTool {
 
   setKind(kind: DimKind): void {
     this.kind = kind
+    this.flash = null
     this.setPicks([])
-    this.build()
   }
 
-  private build(): void {
-    this.body.replaceChildren()
-    this.body.append(
-      segmented<DimKind>(
-        [
-          ['distance', 'Distance'],
-          ['size', 'Ø / R'],
-          ['angle', 'Angle'],
-          ['ordinate', 'Ordinate']
-        ],
-        this.kind,
-        (k) => {
-          this.setKind(k)
-          this.ctx.refreshRibbon()
-        }
-      )
-    )
-    const row = (label: string, control: HTMLElement): void => {
-      const f = el('label', 'tool-field')
-      f.append(el('span', '', label), control)
-      this.body.append(f)
-    }
-    if (this.kind === 'distance')
-      row('Measure', segmented([['true', 'True'], ['x', 'X'], ['y', 'Y'], ['z', 'Z']], this.axis, (v) => (this.axis = v)))
-    if (this.kind === 'size') row('Show', segmented([['auto', 'Auto'], ['diameter', 'Ø'], ['radius', 'R']], this.size, (v) => (this.size = v)))
-    if (this.kind === 'ordinate') row('Show', segmented([['all', 'X Y Z'], ['x', 'X'], ['y', 'Y'], ['z', 'Z']], this.ord, (v) => (this.ord = v)))
-    if (this.kind === 'distance' || this.kind === 'ordinate') {
-      const select = el('select')
-      for (const d of datums.list()) {
-        const o = el('option', '', d.name)
-        o.value = d.id
-        select.append(o)
-      }
-      select.value = this.datumId
-      select.addEventListener('change', () => (this.datumId = select.value))
-      row('Datum', select)
-    }
-    this.note.textContent = HELP[this.kind]
-    this.body.append(this.note)
-    this.sub.textContent = TITLES[this.kind]
+  /** The instruction at the bottom of the viewport: what to click next. */
+  private showPrompt(): void {
+    const step =
+      this.kind === 'size'
+        ? 'select a hole, arc, boss or fillet'
+        : this.picks.length === 0
+          ? `select the first ${this.kind === 'angle' ? 'straight edge or flat face' : 'item'}`
+          : `select the second ${this.kind === 'angle' ? 'straight edge or flat face' : 'item'}`
+    const main = el('span')
+    main.append(el('b', '', TITLES[this.kind]), document.createTextNode(`: ${step}`))
+    this.prompt.replaceChildren(main)
+    if (this.flash) this.prompt.append(el('span', 'vp-prompt-note', this.flash))
+    this.prompt.append(el('span', 'vp-prompt-esc', 'Esc to finish'))
   }
 
   private async click(p: Pick | null): Promise<void> {
     if (this.busy) return
-    if (!p) return this.setPicks([])
+    if (!p) return
     const k = pickKey(p)
     if (this.picks.some((x) => pickKey(x) === k)) return this.setPicks(this.picks.filter((x) => pickKey(x) !== k))
+    this.flash = null
     this.setPicks([...this.picks, p])
     if (this.picks.length < NEEDS[this.kind]) return
     this.busy = true
     try {
       const d = await this.make(this.picks)
-      if (typeof d === 'string') this.note.textContent = d
+      if (typeof d === 'string') this.flash = d
       else {
         this.ctx.doc.addDim(d)
-        this.note.textContent = HELP[this.kind]
+        this.flash = `Added ${d.text}. Next one, or Esc.`
       }
     } catch (e) {
-      this.note.textContent = `Couldn't measure: ${(e as Error).message}`
+      this.flash = `Couldn't measure: ${(e as Error).message}`
     } finally {
       this.busy = false
       this.setPicks([])
@@ -203,6 +171,7 @@ class DimensionTool {
   private setPicks(p: Pick[]): void {
     this.picks = p
     this.showHighlights()
+    this.showPrompt()
   }
 
   private showHighlights(): void {
@@ -230,6 +199,24 @@ class DimensionTool {
       d.setFromMatrixColumn(cam.matrixWorld, 0).add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1))
     }
     return at.clone().add(d.normalize().multiplyScalar(px * this.perPx(at)))
+  }
+
+  /** World box of the bodies picked. */
+  private boxOf(picks: Pick[]): THREE.Box3 {
+    const box = new THREE.Box3()
+    for (const p of picks) box.union(new THREE.Box3().setFromObject(p.object))
+    return box
+  }
+
+  /** How far from `at` along `dir` the box reaches (0 if it doesn't). */
+  private reach(box: THREE.Box3, at: THREE.Vector3, dir: THREE.Vector3): number {
+    if (box.isEmpty()) return 0
+    let m = 0
+    for (let i = 0; i < 8; i++) {
+      const c = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)
+      m = Math.max(m, c.sub(at).dot(dir))
+    }
+    return m
   }
 
   private async describe(picks: Pick[]): Promise<{ items: (Info | null)[]; pair?: Info }> {
@@ -292,8 +279,11 @@ class DimensionTool {
       let side = new THREE.Vector3().crossVectors(dir, viewDir)
       if (side.lengthSq() < 1e-8) side = up.clone()
       side.normalize()
-      if (side.dot(up) < 0) side.negate()
-      const label = this.beside(mid, side, 30)
+      // Off the part: on the side away from it, past its outline.
+      const box = this.boxOf(picks)
+      const away = box.getCenter(new THREE.Vector3()).sub(mid)
+      if (Math.abs(away.dot(side)) > 1e-9 ? away.dot(side) > 0 : side.dot(up) < 0) side.negate()
+      const label = mid.clone().add(side.clone().multiplyScalar(this.reach(box, mid, side) + 28 * this.perPx(mid)))
       return { type: 'distance', axis: this.axis, datumId: this.datumId, points: [arr(a), arr(b)], value, text, label: arr(label), nodeIds }
     }
 
@@ -340,7 +330,12 @@ class DimensionTool {
       const off = rim.clone().sub(centre)
       if (off.lengthSq() < 1e-12) off.copy(right)
       rim = centre.clone().add(off.normalize().multiplyScalar(radius))
-      const label = this.beside(rim, rim.clone().sub(centre), 40)
+      const out = rim.clone().sub(centre)
+      const view = cam.getWorldDirection(new THREE.Vector3())
+      out.sub(view.clone().multiplyScalar(out.dot(view)))
+      if (out.lengthSq() < 1e-12) out.copy(up).add(right)
+      out.normalize()
+      const label = rim.clone().add(out.clone().multiplyScalar(this.reach(this.boxOf(picks), rim, out) + 28 * this.perPx(rim)))
       const value = useDia ? radius * 2 : radius
       return { type: useDia ? 'diameter' : 'radius', points: [arr(centre), arr(rim)], value, text: `${useDia ? 'Ø' : 'R'}${fmt(value)}`, label: arr(label), nodeIds }
     }
@@ -380,7 +375,7 @@ class DimensionTool {
     active = null
     this.off.forEach((f) => f())
     this.hl.dispose()
-    this.panel.remove()
+    this.prompt.remove()
     this.ctx.viewport.blockPick = null
     this.ctx.refreshRibbon()
     this.ctx.viewport.requestRender()

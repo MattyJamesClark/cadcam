@@ -41,7 +41,7 @@ class MeasureTool {
     this.hl = new Highlights(vp)
     this.dims.name = '__dims'
     vp.scene.add(this.dims)
-    const p = toolPanel('Measure', () => this.close())
+    const p = toolPanel('Quick measure', () => this.close())
     this.panel = p.panel
     this.panel.classList.add('wide')
     this.body = p.body

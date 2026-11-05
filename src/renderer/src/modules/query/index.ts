@@ -37,7 +37,7 @@ export const queryModule: CadModule = {
       commands: [
         {
           id: 'query.measure',
-          label: 'Measure',
+          label: 'Quick measure',
           icon: icons.ruler,
           shortcut: 'M',
           tooltip: 'Measure points, edges, faces and the distance / angle between two of them',
@@ -63,7 +63,6 @@ export const queryModule: CadModule = {
         dimCommand('distance', 'Point to point', icons.dimLinear, 'Distance between two points, edges, faces or hole centres: true, or along X / Y / Z', 'D'),
         dimCommand('size', 'Diameter / radius', icons.dimDia, 'Ø or R of a hole, boss, arc or fillet'),
         dimCommand('angle', 'Angle', icons.dimAngle, 'Angle between two straight edges or flat faces'),
-        dimCommand('ordinate', 'Ordinate', icons.dimOrd, 'X / Y / Z of a point or hole centre from a datum'),
         {
           id: 'query.dim.show',
           label: 'Show dimensions',
