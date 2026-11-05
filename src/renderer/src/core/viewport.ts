@@ -62,7 +62,7 @@ export class Viewport extends Emitter<ViewportEvents> {
   private downAt: { x: number; y: number } | null = null
   private bgLight = false
 
-  projection: Projection = 'perspective'
+  projection: Projection = 'orthographic'
   displayMode: DisplayMode = 'shaded-edges'
 
   constructor(private host: HTMLElement, readonly doc: CadDocument) {
