@@ -63,6 +63,8 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
       if (moved > 4 || vp.blockPick?.()) return
       const p = pickAt(vp, e)
       if (p) this.pick(p, this.multi || e.shiftKey)
+      // Empty space clears (Previous brings it back); a body the filter skips does not.
+      else if (!vp.hitTest(vp.ndcOf(e))) this.clear()
     })
     canvas.addEventListener('pointermove', (e) => {
       const first = !this.queued
