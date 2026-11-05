@@ -1,0 +1,1 @@
+em4-exnref, link -O3, O1 files: extra/ShapeCustom_BSplineRestriction.o extra/ShapeUpgrade_ShapeDivide.o extra/ShapeUpgrade_SplitCurve2dContinuity.o extra/ShapeUpgrade_SplitCurve3dContinuity.o extra/ShapeUpgrade_SplitSurface.o 
