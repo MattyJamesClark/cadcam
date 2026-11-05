@@ -240,6 +240,10 @@ export class Shell {
         title: 'View',
         items: (view?.groups ?? []).flatMap((g, i) => [...(i ? ['-'] : []), ...g.commands.map((c) => c.id)])
       },
+      {
+        title: 'Query',
+        items: (this.modules.find((m) => m.id === 'query')?.groups ?? []).flatMap((g, i) => [...(i ? ['-'] : []), ...g.commands.map((c) => c.id)])
+      },
       { title: 'Help', items: ['help.controls', 'help.updates', '-', 'help.about'] }
     ]
   }
@@ -466,6 +470,7 @@ export class Shell {
       for (const c of g.commands) {
         const b = h('button', 'cmd')
         b.innerHTML = `${c.icon}<span>${c.label}</span>`
+        b.dataset.cmd = c.id
         b.title = [c.tooltip ?? c.label, c.shortcut ? `(${c.shortcut})` : ''].join(' ').trim()
         b.addEventListener('click', () => this.run(c))
         this.buttons.set(c.id, b)

@@ -65,6 +65,8 @@ export class Viewport extends Emitter<ViewportEvents> {
   projection: Projection = 'orthographic'
   /** Set by tools with on-screen handles: true while the pointer is over one (no picking then). */
   blockPick: (() => boolean) | null = null
+  /** Called after each frame (to place screen labels on 3D points). */
+  readonly afterRender = new Set<() => void>()
   displayMode: DisplayMode = 'shaded-edges'
 
   constructor(readonly host: HTMLElement, readonly doc: CadDocument) {
@@ -100,8 +102,8 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.planes.visible = false
     this.scene.add(this.grid, this.planes, this.axes, doc.root)
 
-    this.viewCube = new ViewCube(host, (dir) => this.lookFrom(dir))
-    this.triad = new AxisTriad(host, (dir) => this.lookFrom(dir))
+    this.viewCube = new ViewCube(host, (dir) => this.lookNormalTo(dir))
+    this.triad = new AxisTriad(host, (dir) => this.lookNormalTo(dir))
 
     doc.on('changed', () => {
       this.applyDisplayMode()
@@ -150,6 +152,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.renderer.render(this.scene, cam)
     this.viewCube.render(cam)
     this.triad.render(cam)
+    this.afterRender.forEach((f) => f())
   }
 
   private resize(): void {
@@ -241,6 +244,33 @@ export class Viewport extends Emitter<ViewportEvents> {
   /** Orient the camera to look at the current target from `dir`. */
   lookFrom(dir: THREE.Vector3, animate = true): void {
     this.nav.goTo(this.nav.poseLookingFrom(dir), animate)
+  }
+
+  /**
+   * Look straight at a view-cube face / along an axis, turning as little as
+   * possible: the screen keeps its current "up" (snapped to the nearest 90°),
+   * so a part viewed on its side stays on its side. Corners and edges of the
+   * cube use the usual Z-up view.
+   */
+  lookNormalTo(dir: THREE.Vector3, animate = true): void {
+    const d = dir.clone().normalize()
+    const axis = Math.max(Math.abs(d.x), Math.abs(d.y), Math.abs(d.z)) > 0.999
+    if (!axis) return this.lookFrom(d, animate)
+    const curUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.nav.pose.quat)
+    let best: THREE.Vector3 | null = null
+    let bestDot = -Infinity
+    for (const c of [
+      new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)
+    ]) {
+      if (Math.abs(c.dot(d)) > 0.5) continue
+      const dot = c.dot(curUp)
+      if (dot > bestDot) {
+        bestDot = dot
+        best = c
+      }
+    }
+    this.nav.goTo(this.nav.poseLookingFrom(d, best ?? undefined), animate)
   }
 
   setStandardView(v: StandardView): void {
@@ -351,6 +381,24 @@ export class Viewport extends Emitter<ViewportEvents> {
   /** First visible model point under the given NDC position. */
   pickPoint(ndc: THREE.Vector2): THREE.Vector3 | null {
     return this.pickHit(ndc)?.point ?? null
+  }
+
+  /** Pointer event to normalised device coordinates. */
+  ndcOf(e: { clientX: number; clientY: number }): THREE.Vector2 {
+    const r = this.renderer.domElement.getBoundingClientRect()
+    return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+  }
+
+  /** Nearest visible model hit under a screen point. */
+  hitTest(ndc: THREE.Vector2): THREE.Intersection | undefined {
+    return this.pickHit(ndc)
+  }
+
+  /** World point to canvas pixels. */
+  toScreen(p: THREE.Vector3): THREE.Vector2 {
+    const v = p.clone().project(this.camera)
+    const el = this.renderer.domElement
+    return new THREE.Vector2(((v.x + 1) / 2) * el.clientWidth, ((1 - v.y) / 2) * el.clientHeight)
   }
 
   private pickHit(ndc: THREE.Vector2): THREE.Intersection | undefined {

@@ -17,7 +17,7 @@ const EDGE_TAG = '__edges'
 /** userData worth keeping; everything else is runtime state. */
 const KEEP = ['cadKind', 'layers', 'props', 'fileProps', 'solid', 'wireBody', '__node']
 
-type ArrayKind = 'f32' | 'u32' | 'u16' | 'u8' | 'i16' | 'i8'
+type ArrayKind = 'f32' | 'u32' | 'u16' | 'u8' | 'i16' | 'i8' | 'i32'
 interface BufRef {
   o: number
   l: number
@@ -34,6 +34,10 @@ interface GeoJson {
   edges?: BufRef
   /** Exact B-rep of the body (for STEP / IGES export). */
   brep?: BufRef
+  /** Picking data: CAD face per triangle, edge segment ranges, vertex points. */
+  triFace?: BufRef
+  edgeRanges?: BufRef
+  vertices?: BufRef
   /** Quick-shape parameters (exact export of boxes, cylinders, spheres). */
   prim?: Record<string, unknown>
 }
@@ -77,11 +81,13 @@ const ARRAYS: Record<ArrayKind, { new (b: ArrayBuffer, o: number, l: number): Ar
   u16: Uint16Array,
   u8: Uint8Array,
   i16: Int16Array,
-  i8: Int8Array
+  i8: Int8Array,
+  i32: Int32Array
 }
 
 function kindOf(a: ArrayLike<number>): ArrayKind {
   if (a instanceof Uint32Array) return 'u32'
+  if (a instanceof Int32Array) return 'i32'
   if (a instanceof Uint16Array) return 'u16'
   if (a instanceof Uint8Array) return 'u8'
   if (a instanceof Int16Array) return 'i16'
@@ -126,6 +132,7 @@ export function saveProject(doc: CadDocument, appVersion?: string): Uint8Array {
     if (g.groups.length) json.groups = g.groups.map((gr) => [gr.start, gr.count, gr.materialIndex ?? 0])
     if (g.userData.edgePositions) json.edges = put(g.userData.edgePositions as Float32Array)
     if (g.userData.brep) json.brep = put(g.userData.brep as Uint8Array)
+    for (const k of ['triFace', 'edgeRanges', 'vertices'] as const) if (g.userData[k]) json[k] = put(g.userData[k] as ArrayLike<number>)
     if (g.userData.prim) json.prim = g.userData.prim
     id = geoJson.length
     geoJson.push(json)
@@ -250,6 +257,7 @@ export function readProject(data: ArrayBuffer): { name: string; roots: { object:
     for (const [start, count, mi] of g.groups ?? []) geo.addGroup(start, count, mi)
     if (g.edges) geo.userData.edgePositions = arr(g.edges)
     if (g.brep) geo.userData.brep = arr(g.brep)
+    for (const k of ['triFace', 'edgeRanges', 'vertices'] as const) if (g[k]) geo.userData[k] = arr(g[k]!)
     if (g.prim) geo.userData.prim = g.prim
     if (!geo.getAttribute('normal') && g.index) geo.computeVertexNormals()
     return geo

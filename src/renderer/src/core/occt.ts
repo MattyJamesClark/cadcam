@@ -25,8 +25,13 @@ interface CadNode {
 interface CadMesh {
   position: Float32Array
   index: Uint32Array
-  faces: [number, number, RGB | null][]
+  /** Triangle range, colour and CAD face index of each face. */
+  faces: [number, number, RGB | null, number?][]
   edges: Float32Array
+  /** Per CAD edge: first segment in `edges`, segment count. */
+  edgeRanges?: Uint32Array
+  /** Per CAD vertex: x, y, z. */
+  vertices?: Float32Array
   /** The exact body (OCCT binary B-rep), kept so it can be exported again. */
   brep?: Uint8Array
 }
@@ -136,12 +141,73 @@ export function writeCadFile(
   })
 }
 
+// ---- measuring -----------------------------------------------------------------
+// The kernel keeps bodies it has measured, by key, so each B-rep is sent once.
+
+const brepKeys = new WeakMap<Uint8Array, number>()
+let nextKey = 1
+let sentKeys = new Set<number>()
+let sentFor: Worker | null = null
+
+export interface MeasureItem {
+  brep: Uint8Array
+  kind: 'body' | 'face' | 'edge' | 'vertex'
+  index: number
+  /** Body to world (or datum) placement, row-major 3x4. */
+  matrix: number[]
+}
+
+async function kernelCall<T>(op: 'measure' | 'bounds', items: { brep: Uint8Array; [k: string]: unknown }[]): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const w = getWorker()
+    if (sentFor !== w) {
+      sentFor = w
+      sentKeys = new Set()
+    }
+    const payload = items.map(({ brep, ...rest }) => {
+      let key = brepKeys.get(brep)
+      if (key === undefined) brepKeys.set(brep, (key = nextKey++))
+      const first = !sentKeys.has(key)
+      sentKeys.add(key)
+      return { ...rest, key, brep: first ? brep : undefined }
+    })
+    const id = nextId++
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        pending.set(id, { resolve, reject })
+        w.postMessage({ id, op, items: payload })
+      })
+    } catch (e) {
+      // The kernel lost its copy (restarted): send everything again.
+      if ((e as Error).message !== 'missing-shape' || attempt) throw e
+      sentKeys = new Set()
+    }
+  }
+  throw new Error('unreachable')
+}
+
+export type Vec3 = [number, number, number]
+export interface MeasureResult {
+  items: Record<string, unknown>[]
+  pair?: { distance?: number; p1?: Vec3; p2?: Vec3; angle?: number; centerDistance?: number; c1?: Vec3; c2?: Vec3 }
+}
+
+/** Exact properties of 1 or 2 picked items, and how they relate. */
+export function measureCad(items: MeasureItem[]): Promise<MeasureResult> {
+  return kernelCall<MeasureResult>('measure', items as unknown as { brep: Uint8Array }[])
+}
+
+/** Exact bounding box of bodies; matrices take each body into the frame to measure in. */
+export function boundsCad(items: { brep: Uint8Array; matrix: number[] }[]): Promise<{ min: Vec3; max: Vec3 }> {
+  return kernelCall('bounds', items)
+}
+
 // ---- import cache (IndexedDB) ---------------------------------------------
 // Converting B-rep to triangles is the slow part of an import, and toolmakers
 // reopen the same files a lot. The result is kept per file content + quality.
 
 /** Bump when the reader's output changes, so stale results aren't reused. */
-const READER_VERSION = 5
+const READER_VERSION = 6
 const CACHE_ENTRIES = 24
 
 async function cacheKey(data: ArrayBuffer, format: string, quality: string): Promise<string | null> {
@@ -232,8 +298,13 @@ function buildScene(res: CadResult): THREE.Object3D {
     geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3))
     geo.userData.edgePositions = m.edges
     if (m.brep) geo.userData.brep = m.brep
+    if (m.edgeRanges) geo.userData.edgeRanges = m.edgeRanges
+    if (m.vertices) geo.userData.vertices = m.vertices
     if (m.index.length === 0) return geo // wireframe body: edges only
     let index = m.index
+    // CAD face of each triangle (in the final triangle order), for picking faces.
+    const triFace = m.faces[0]?.[3] !== undefined ? new Int32Array(m.index.length / 3) : null
+    if (triFace) for (const [first, last, , f] of m.faces) triFace.fill(f!, first, last + 1)
     if (m.faces.some((f) => f[2])) {
       // Sort triangles by colour so each colour is one draw call, not one per face.
       const keys: string[] = []
@@ -248,16 +319,19 @@ function buildScene(res: CadResult): THREE.Object3D {
       }
       index = new Uint32Array(m.index.length)
       let at = 0
+      const sorted = triFace ? new Int32Array(triFace.length) : null
       keys.forEach((k, gi) => {
         const start = at
         for (const [first, last] of byKey.get(k)!) {
           index.set(m.index.subarray(first * 3, (last + 1) * 3), at)
+          sorted?.set(triFace!.subarray(first, last + 1), at / 3)
           at += (last - first + 1) * 3
         }
         geo.addGroup(start, at - start, gi)
       })
       geo.userData.grouped = keys
-    }
+      if (sorted) geo.userData.triFace = sorted
+    } else if (triFace) geo.userData.triFace = triFace
     geo.setIndex(new THREE.BufferAttribute(index, 1))
     geo.computeVertexNormals() // vertices aren't shared between faces, so edges stay sharp
     return geo
@@ -282,6 +356,8 @@ function buildScene(res: CadResult): THREE.Object3D {
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.BufferAttribute(src.edges, 3))
       if (src.brep) geo.userData.brep = src.brep
+      if (src.edgeRanges) geo.userData.edgeRanges = src.edgeRanges
+      if (src.vertices) geo.userData.vertices = src.vertices
       const mat = new THREE.LineBasicMaterial()
       if (color) mat.color.setRGB(color[0], color[1], color[2])
       else mat.userData.defaultColor = true

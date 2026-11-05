@@ -49,6 +49,12 @@ onmessage = async (ev) => {
   const { id, format, buffer, quality } = ev.data
   try {
     if (ev.data.op === 'write') return await write(id, format, ev.data.spec)
+    if (ev.data.op === 'measure' || ev.data.op === 'bounds') {
+      const k = await kernel()
+      const res = ev.data.op === 'measure' ? k.measure(ev.data.items) : k.bounds(ev.data.items)
+      if (res.error) throw new Error(res.error)
+      return postMessage({ id, result: res })
+    }
     const k = await kernel()
     const bytes = new Uint8Array(buffer)
     const q = QUALITY[quality] || QUALITY.normal
