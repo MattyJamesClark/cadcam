@@ -18,7 +18,19 @@
 #include <emscripten/val.h>
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Cone.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Elips.hxx>
+#include <gp_Lin.hxx>
+#include <gp_Pln.hxx>
+#include <gp_Sphere.hxx>
+#include <gp_Torus.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
@@ -63,6 +75,7 @@
 #include <TopLoc_Location.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 #include <XCAFDoc_ColorTool.hxx>
@@ -139,8 +152,11 @@ struct MeshOut {
   struct Face {
     uint32_t first, last;
     std::optional<RGB> color;
+    int index;  // 0-based in TopExp::MapShapes(shape, TopAbs_FACE) order
   };
   std::vector<Face> faces;
+  std::vector<uint32_t> edgeRanges;  // per edge (MapShapes order): first segment, segment count
+  std::vector<float> vertices;       // per vertex (MapShapes order): x, y, z
   std::string brep;
 };
 
@@ -179,7 +195,7 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
         out.index.push_back(base + c - 1);
       }
     }
-    out.faces.push_back({tri, tri + nt - 1, faceColor(face)});
+    out.faces.push_back({tri, tri + nt - 1, faceColor(face), i - 1});
     tri += nt;
   }
 
@@ -188,6 +204,14 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
   TopExp::MapShapes(shape, TopAbs_EDGE, edgeMap);
   for (int i = 1; i <= edgeMap.Extent(); i++) {
     const TopoDS_Edge& edge = TopoDS::Edge(edgeMap.FindKey(i));
+    out.edgeRanges.push_back(static_cast<uint32_t>(out.edges.size() / 6));
+    out.edgeRanges.push_back(0);
+    const size_t before = out.edges.size();
+    struct Count {
+      MeshOut& o;
+      size_t before;
+      ~Count() { o.edgeRanges.back() = static_cast<uint32_t>((o.edges.size() - before) / 6); }
+    } count{out, before};
     if (BRep_Tool::Degenerated(edge)) continue;
     try {
       BRepAdaptor_Curve curve(edge);
@@ -200,6 +224,13 @@ MeshOut meshBody(const TopoDS_Shape& shape, double angle, double defl, ColorFn f
       // Edge without a 3D curve: skip it.
     }
   }
+  TopTools_IndexedMapOfShape vertexMap;
+  TopExp::MapShapes(shape, TopAbs_VERTEX, vertexMap);
+  for (int i = 1; i <= vertexMap.Extent(); i++) {
+    const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(vertexMap.FindKey(i)));
+    out.vertices.insert(out.vertices.end(), {float(p.X()), float(p.Y()), float(p.Z())});
+  }
+
   // The exact shape, without the display triangles (they're rebuilt on read).
   try {
     std::ostringstream os;
@@ -216,10 +247,13 @@ val meshVal(const MeshOut& m) {
   o.set("position", typedCopy(m.position));
   o.set("index", typedCopy(m.index));
   o.set("edges", typedCopy(m.edges));
+  o.set("edgeRanges", typedCopy(m.edgeRanges));
+  o.set("vertices", typedCopy(m.vertices));
   val faces = val::array();
   for (const auto& f : m.faces) {
     val e = val::array();
     e.call<void>("push", f.first, f.last, rgbVal(f.color));
+    e.call<void>("push", f.index);
     faces.call<void>("push", e);
   }
   o.set("faces", faces);
@@ -238,10 +272,19 @@ struct Bodies {
  * Split a shape into bodies: each solid, each shell not in a solid, and the
  * loose faces / curves of each compound as one more (a surface model).
  */
-Bodies bodiesOf(const TopoDS_Shape& shape) {
+Bodies bodiesOf(const TopoDS_Shape& shape, bool dropCurves) {
   Bodies b;
   BRep_Builder bb;
+  auto hasVolume = [](const TopoDS_Shape& s) {
+    return TopExp_Explorer(s, TopAbs_SHELL).More();
+  };
   std::function<void(const TopoDS_Shape&)> walk = [&](const TopoDS_Shape& s) {
+    if (!hasVolume(s)) {
+      // Surfaces / curves only (e.g. a group of construction curves): one body.
+      b.shapes.push_back(s);
+      b.solid.push_back(false);
+      return;
+    }
     if (s.ShapeType() == TopAbs_SOLID || s.ShapeType() == TopAbs_SHELL) {
       b.shapes.push_back(s);
       b.solid.push_back(s.ShapeType() == TopAbs_SOLID);
@@ -269,11 +312,11 @@ Bodies bodiesOf(const TopoDS_Shape& shape) {
     }
   };
   if (!shape.IsNull()) walk(shape);
-  // Next to solids, curve-only leftovers are construction geometry (axes, sketches): leave them out.
+  // In a CAD part, curve-only leftovers next to solids are construction geometry (axes, sketches): leave them out.
   bool anySolid = false;
   for (size_t i = 0; i < b.shapes.size(); i++)
     if (b.shapes[i].ShapeType() == TopAbs_SOLID || b.shapes[i].ShapeType() == TopAbs_SHELL) anySolid = true;
-  if (anySolid) {
+  if (anySolid && dropCurves) {
     Bodies kept;
     for (size_t i = 0; i < b.shapes.size(); i++) {
       TopExp_Explorer faces(b.shapes[i], TopAbs_FACE);
@@ -417,7 +460,7 @@ class XcafReader {
     info.color = labelColor(label);
     if (!info.color) info.color = shapeColor(shape);
     info.layers = layersOf(label);
-    Bodies bodies = bodiesOf(shape);
+    Bodies bodies = bodiesOf(shape, true);
     for (size_t bi = 0; bi < bodies.shapes.size(); bi++) {
       const TopoDS_Shape& body = bodies.shapes[bi];
       TDF_Label sub;
@@ -569,7 +612,7 @@ val readBrep(const std::string& path, double ratio, double angle, Progress progr
   BRepMesh_IncrementalMesh(shape, defl, false, angle, false);
   val meshes = val::array();
   val kids = val::array();
-  Bodies bodies = bodiesOf(shape);
+  Bodies bodies = bodiesOf(shape, false);
   for (size_t bi = 0; bi < bodies.shapes.size(); bi++) {
     const TopoDS_Shape& body = bodies.shapes[bi];
     MeshOut m = meshBody(body, angle, defl, [](const TopoDS_Face&) { return std::optional<RGB>(); });
@@ -951,7 +994,263 @@ val readCad(std::string path, std::string format, double ratio, double angle, va
   }
 }
 
+
+// ---- measure ----------------------------------------------------------------
+//
+// Module.measure(items) with items = [{ key, brep?, kind: 'body'|'face'|'edge'|'vertex', index, matrix? }]
+// (index in TopExp::MapShapes order, matrix row-major 3x4 to world). Bodies are
+// cached by `key`, so `brep` is only needed the first time.
+// -> { items: [description], pair?: { distance, p1, p2, angle?, centerDistance?, c1?, c2? } } | { error }
+
+namespace {
+constexpr double kPi = 3.14159265358979323846;
+std::map<int, TopoDS_Shape> g_shapes;
+
+val xyz(const gp_XYZ& p) {
+  val a = val::array();
+  a.call<void>("push", p.X(), p.Y(), p.Z());
+  return a;
+}
+
+struct Measured {
+  TopoDS_Shape shape;
+  std::optional<gp_Dir> dir;  // plane normal, line direction, axis
+  bool isAxis = false;        // direction of a line / axis (sign doesn't matter)
+  std::optional<gp_Pnt> center;
+};
+
+val describe(const std::string& kind, Measured& m) {
+  val d = val::object();
+  d.set("kind", kind);
+  GProp_GProps g;
+  if (kind == "vertex") {
+    d.set("point", xyz(BRep_Tool::Pnt(TopoDS::Vertex(m.shape)).XYZ()));
+    m.center = BRep_Tool::Pnt(TopoDS::Vertex(m.shape));
+  } else if (kind == "edge") {
+    const TopoDS_Edge& e = TopoDS::Edge(m.shape);
+    BRepGProp::LinearProperties(e, g);
+    d.set("length", g.Mass());
+    BRepAdaptor_Curve c(e);
+    d.set("start", xyz(c.Value(c.FirstParameter()).XYZ()));
+    d.set("end", xyz(c.Value(c.LastParameter()).XYZ()));
+    switch (c.GetType()) {
+      case GeomAbs_Line:
+        d.set("curve", "Line");
+        m.dir = c.Line().Direction();
+        m.isAxis = true;
+        d.set("direction", xyz(m.dir->XYZ()));
+        break;
+      case GeomAbs_Circle: {
+        const gp_Circ circ = c.Circle();
+        d.set("curve", BRep_Tool::IsClosed(e) || std::fabs(c.LastParameter() - c.FirstParameter() - 2 * kPi) < 1e-6 ? "Circle" : "Arc");
+        d.set("radius", circ.Radius());
+        d.set("center", xyz(circ.Location().XYZ()));
+        d.set("normal", xyz(circ.Axis().Direction().XYZ()));
+        d.set("sweep", (c.LastParameter() - c.FirstParameter()) * 180 / kPi);
+        m.center = circ.Location();
+        m.dir = circ.Axis().Direction();
+        m.isAxis = true;
+        break;
+      }
+      case GeomAbs_Ellipse:
+        d.set("curve", "Ellipse");
+        d.set("major", c.Ellipse().MajorRadius());
+        d.set("minor", c.Ellipse().MinorRadius());
+        d.set("center", xyz(c.Ellipse().Location().XYZ()));
+        m.center = c.Ellipse().Location();
+        break;
+      default:
+        d.set("curve", "Spline");
+    }
+  } else if (kind == "face") {
+    const TopoDS_Face& f = TopoDS::Face(m.shape);
+    BRepGProp::SurfaceProperties(f, g);
+    d.set("area", g.Mass());
+    d.set("centroid", xyz(g.CentreOfMass().XYZ()));
+    BRepAdaptor_Surface su(f);
+    switch (su.GetType()) {
+      case GeomAbs_Plane: {
+        gp_Dir n = su.Plane().Axis().Direction();
+        if (f.Orientation() == TopAbs_REVERSED) n.Reverse();
+        d.set("surface", "Plane");
+        d.set("normal", xyz(n.XYZ()));
+        m.dir = n;
+        break;
+      }
+      case GeomAbs_Cylinder:
+        d.set("surface", "Cylinder");
+        d.set("radius", su.Cylinder().Radius());
+        d.set("axis", xyz(su.Cylinder().Axis().Direction().XYZ()));
+        d.set("axisPoint", xyz(su.Cylinder().Axis().Location().XYZ()));
+        m.dir = su.Cylinder().Axis().Direction();
+        m.isAxis = true;
+        break;
+      case GeomAbs_Cone:
+        d.set("surface", "Cone");
+        d.set("halfAngle", su.Cone().SemiAngle() * 180 / kPi);
+        d.set("axis", xyz(su.Cone().Axis().Direction().XYZ()));
+        m.dir = su.Cone().Axis().Direction();
+        m.isAxis = true;
+        break;
+      case GeomAbs_Sphere:
+        d.set("surface", "Sphere");
+        d.set("radius", su.Sphere().Radius());
+        d.set("center", xyz(su.Sphere().Location().XYZ()));
+        m.center = su.Sphere().Location();
+        break;
+      case GeomAbs_Torus:
+        d.set("surface", "Torus");
+        d.set("major", su.Torus().MajorRadius());
+        d.set("minor", su.Torus().MinorRadius());
+        break;
+      default:
+        d.set("surface", "Freeform");
+    }
+  } else {
+    BRepGProp::VolumeProperties(m.shape, g);
+    const double vol = g.Mass();
+    if (std::fabs(vol) > 1e-9) {
+      d.set("volume", std::fabs(vol));
+      d.set("centroid", xyz(g.CentreOfMass().XYZ()));
+    }
+    GProp_GProps sg;
+    BRepGProp::SurfaceProperties(m.shape, sg);
+    d.set("area", sg.Mass());
+  }
+  return d;
+}
+}  // namespace
+
+val measure(val items) {
+  try {
+    std::vector<Measured> list;
+    val each = val::array();
+    for (int i = 0, n = items["length"].as<int>(); i < n; i++) {
+      val it = items[i];
+      const int key = it["key"].as<int>();
+      if (!it["brep"].isUndefined() && !it["brep"].isNull()) {
+        std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(it["brep"]);
+        std::istringstream is(std::string(bytes.begin(), bytes.end()));
+        TopoDS_Shape sh;
+        BinTools::Read(sh, is);
+        g_shapes[key] = sh;
+      }
+      auto found = g_shapes.find(key);
+      if (found == g_shapes.end()) throw std::runtime_error("missing-shape");
+      const std::string kind = it["kind"].as<std::string>();
+      TopoDS_Shape sub = found->second;
+      if (kind != "body") {
+        TopTools_IndexedMapOfShape map;
+        TopExp::MapShapes(sub, kind == "face" ? TopAbs_FACE : kind == "edge" ? TopAbs_EDGE : TopAbs_VERTEX, map);
+        const int idx = it["index"].as<int>();
+        if (idx < 0 || idx >= map.Extent()) throw std::runtime_error("That item no longer matches its body");
+        sub = map.FindKey(idx + 1);
+      }
+      if (!it["matrix"].isUndefined() && !it["matrix"].isNull()) {
+        val mm = it["matrix"];
+        double v[12];
+        for (int k = 0; k < 12; k++) v[k] = mm[k].as<double>();
+        gp_Trsf t;
+        t.SetValues(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]);
+        if (std::fabs(t.ScaleFactor() - 1) > 1e-9 || t.IsNegative()) sub = BRepBuilderAPI_Transform(sub, t, true).Shape();
+        else sub = sub.Moved(TopLoc_Location(t));
+      }
+      Measured m;
+      m.shape = sub;
+      each.call<void>("push", describe(kind, m));
+      list.push_back(m);
+    }
+    val res = val::object();
+    res.set("items", each);
+    if (list.size() == 2) {
+      val pair = val::object();
+      BRepExtrema_DistShapeShape dss(list[0].shape, list[1].shape);
+      if (dss.IsDone() && dss.NbSolution() > 0) {
+        pair.set("distance", dss.Value());
+        pair.set("p1", xyz(dss.PointOnShape1(1).XYZ()));
+        pair.set("p2", xyz(dss.PointOnShape2(1).XYZ()));
+      }
+      if (list[0].dir && list[1].dir) {
+        double a = list[0].dir->Angle(*list[1].dir) * 180 / kPi;
+        if (list[0].isAxis || list[1].isAxis) a = std::min(a, 180 - a);
+        pair.set("angle", a);
+      }
+      if (list[0].center && list[1].center) {
+        pair.set("centerDistance", list[0].center->Distance(*list[1].center));
+        pair.set("c1", xyz(list[0].center->XYZ()));
+        pair.set("c2", xyz(list[1].center->XYZ()));
+      }
+      res.set("pair", pair);
+    }
+    return res;
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
+
+
+/**
+ * Exact bounding box of bodies in a datum frame.
+ * items = [{ key, brep?, matrix? }] with matrix = body to datum frame (row-major 3x4).
+ * -> { min: [x,y,z], max: [x,y,z] } | { error }
+ */
+val bounds(val items) {
+  try {
+    Bnd_Box box;
+    for (int i = 0, n = items["length"].as<int>(); i < n; i++) {
+      val it = items[i];
+      const int key = it["key"].as<int>();
+      if (!it["brep"].isUndefined() && !it["brep"].isNull()) {
+        std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(it["brep"]);
+        std::istringstream is(std::string(bytes.begin(), bytes.end()));
+        TopoDS_Shape sh;
+        BinTools::Read(sh, is);
+        g_shapes[key] = sh;
+      }
+      auto found = g_shapes.find(key);
+      if (found == g_shapes.end()) throw std::runtime_error("missing-shape");
+      TopoDS_Shape sh = found->second;
+      if (!it["matrix"].isUndefined() && !it["matrix"].isNull()) {
+        val mm = it["matrix"];
+        double v[12];
+        for (int k = 0; k < 12; k++) v[k] = mm[k].as<double>();
+        gp_Trsf t;
+        t.SetValues(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]);
+        sh = BRepBuilderAPI_Transform(sh, t, true).Shape();
+      }
+      BRepBndLib::AddOptimal(sh, box, false, false);
+    }
+    if (box.IsVoid()) throw std::runtime_error("Nothing to measure");
+    double x0, y0, z0, x1, y1, z1;
+    box.Get(x0, y0, z0, x1, y1, z1);
+    val res = val::object();
+    res.set("min", xyz(gp_XYZ(x0, y0, z0)));
+    res.set("max", xyz(gp_XYZ(x1, y1, z1)));
+    return res;
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
+
+/** Forget cached bodies (when the document is cleared). */
+void forgetShapes() { g_shapes.clear(); }
+
 EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("readCad", &readCad);
   emscripten::function("writeCad", &writeCad);
+  emscripten::function("measure", &measure);
+  emscripten::function("bounds", &bounds);
+  emscripten::function("forgetShapes", &forgetShapes);
 }
