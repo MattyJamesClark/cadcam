@@ -211,11 +211,12 @@ const MAX_FACETED = 60000
 function cadSpec(root: THREE.Object3D): CadWriteNode {
   const brepIds = new Map<Uint8Array, number>()
   const identity = new THREE.Matrix4()
-  const node = (o: THREE.Object3D): CadWriteNode | null => {
+  const node = (o: THREE.Object3D, parentName: string): CadWriteNode | null => {
     if (!o.visible || o.name === '__edges') return null
     o.updateMatrix()
     const e = o.matrix.elements // column-major
-    const base: CadWriteNode = { name: o.name, kind: 'assembly' }
+    // Unnamed bodies of a part take the part's name (as most CAD systems show them).
+    const base: CadWriteNode = { name: o.name || parentName, kind: 'assembly' }
     if (!o.matrix.equals(identity)) base.matrix = [e[0], e[4], e[8], e[12], e[1], e[5], e[9], e[13], e[2], e[6], e[10], e[14]]
     const layers = o.userData.layers as string[] | undefined
     if (layers?.length) base.layers = layers
@@ -243,14 +244,14 @@ function cadSpec(root: THREE.Object3D): CadWriteNode {
       return body
     }
     if ((o as THREE.Points).isPoints) return null
-    const children = o.children.map(node).filter((c): c is CadWriteNode => !!c)
+    const children = o.children.map((c) => node(c, base.name)).filter((c): c is CadWriteNode => !!c)
     if (!children.length) return null
     return { ...base, kind: o.userData.cadKind === 'part' ? 'part' : 'assembly', children }
   }
-  const children = root.children.map(node).filter((c): c is CadWriteNode => !!c)
+  const children = root.children.map((c) => node(c, root.name)).filter((c): c is CadWriteNode => !!c)
   // One item without a placement is the model itself; otherwise wrap in an assembly.
   if (children.length === 1 && !children[0].matrix) return children[0]
-  return { name: children.length === 1 ? children[0].name : 'Assembly', kind: 'assembly', children }
+  return { name: root.name || (children.length === 1 ? children[0].name : 'Assembly'), kind: 'assembly', children }
 }
 
 /**

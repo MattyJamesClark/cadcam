@@ -152,11 +152,13 @@ async function exportAs(ctx: ModuleContext, ext: string): Promise<void> {
   const exp = listExporters().find((e) => e.extension === ext)!
   const items = ctx.doc.selection().length ? ctx.doc.selectedTopNodes() : ctx.doc.roots.filter((n) => ctx.doc.isShown(n))
   const group = new THREE.Group()
+  group.name = ctx.doc.name.replace(/\.[^.]+$/, '').replace(/ •$/, '')
   ctx.doc.root.updateMatrixWorld(true)
   for (const n of items) {
     // Bake each node's placement in the file (axis/unit conversion, assembly position).
     const copy = n.object.clone(true)
     copy.visible = true
+    copy.name = n.name.replace(/\.[^.]+$/, '')
     n.object.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
     group.add(copy)
   }

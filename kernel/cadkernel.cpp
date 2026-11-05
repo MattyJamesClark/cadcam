@@ -29,6 +29,7 @@
 #include <BRepPrimAPI_MakeSphere.hxx>
 #include <BinTools.hxx>
 #include <IGESCAFControl_Writer.hxx>
+#include <IGESControl_Controller.hxx>
 #include <STEPCAFControl_Writer.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <TopoDS_Compound.hxx>
@@ -72,6 +73,7 @@
 #include <gp_Vec.hxx>
 
 #include <algorithm>
+#include <functional>
 #include <array>
 #include <sstream>
 #include <stdexcept>
@@ -775,19 +777,40 @@ val writeCad(std::string path, std::string format, val spec, val progressFn) {
     if (top.IsNull()) throw std::runtime_error("Nothing to export: none of the items has exportable geometry");
     progress("Writing file");
     if (format == "brep") {
-      if (!BRepTools::Write(XCAFDoc_ShapeTool::GetShape(top), path.c_str())) throw std::runtime_error("Could not write the BREP file");
+      // One flat compound of placed bodies.
+      TopoDS_Compound all;
+      BRep_Builder b;
+      b.MakeCompound(all);
+      std::function<void(const TDF_Label&, const TopLoc_Location&)> collect = [&](const TDF_Label& l, const TopLoc_Location& loc) {
+        if (!XCAFDoc_ShapeTool::IsAssembly(l)) {
+          b.Add(all, XCAFDoc_ShapeTool::GetShape(l).Moved(loc));
+          return;
+        }
+        TDF_LabelSequence comps;
+        XCAFDoc_ShapeTool::GetComponents(l, comps, false);
+        for (int i = 1; i <= comps.Length(); i++) {
+          TDF_Label ref;
+          XCAFDoc_ShapeTool::GetReferredShape(comps.Value(i), ref);
+          collect(ref, loc * XCAFDoc_ShapeTool::GetLocation(comps.Value(i)));
+        }
+      };
+      collect(top, TopLoc_Location());
+      if (!BRepTools::Write(all, path.c_str())) throw std::runtime_error("Could not write the BREP file");
     } else if (format == "step") {
-      Interface_Static::SetCVal("write.step.unit", "MM");
-      Interface_Static::SetIVal("write.stepcaf.subshapes.name", 1);
+      // Parameters exist once the writer has set up its translator, so set them after.
       STEPCAFControl_Writer wr;
+      Interface_Static::SetCVal("write.step.unit", "MM");
       wr.SetColorMode(true);
       wr.SetNameMode(true);
       wr.SetLayerMode(true);
       if (!wr.Transfer(w.doc(), STEPControl_AsIs)) throw std::runtime_error("The CAD kernel could not convert the model to STEP");
       if (wr.Write(path.c_str()) != IFSelect_RetDone) throw std::runtime_error("Could not write the STEP file");
     } else {
+      // Solids as B-rep (type 186), so they come back as solids, not loose faces.
+      // (The parameters only exist once the IGES translator is set up.)
+      IGESControl_Controller::Init();
+      Interface_Static::SetIVal("write.iges.brep.mode", 1);
       Interface_Static::SetCVal("write.iges.unit", "MM");
-      Interface_Static::SetIVal("write.iges.brep.mode", 1);  // solids as B-rep (type 186), not trimmed surfaces
       IGESCAFControl_Writer wr;
       wr.SetColorMode(true);
       wr.SetNameMode(true);
