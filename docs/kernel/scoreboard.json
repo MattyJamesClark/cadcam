@@ -1,6 +1,6 @@
 {
  "build": "em3-legacy, link -O3, O1 files: extra/ShapeCustom_BSplineRestriction.o extra/ShapeUpgrade_ShapeDivide.o",
- "date": "2026-11-06T22:56:06.442Z",
+ "date": "2026-11-06T23:08:45.162Z",
  "rows": [
   {
    "id": "F1",
@@ -10,15 +10,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 9.53,
-   "oursMs": 14,
+   "rawMs": 15.8,
+   "oursMs": 18.1,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (13.6 ms)"
+    "direct: ok (17.7 ms)"
    ]
   },
   {
@@ -29,15 +29,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 12.3,
-   "oursMs": 11,
+   "rawMs": 15.4,
+   "oursMs": 14.7,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (10.7 ms)"
+    "direct: ok (14.4 ms)"
    ]
   },
   {
@@ -48,15 +48,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 16.9,
-   "oursMs": 20.2,
+   "rawMs": 22.4,
+   "oursMs": 26.2,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (19.7 ms)"
+    "direct: ok (25.5 ms)"
    ]
   },
   {
@@ -67,15 +67,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.62,
-   "oursMs": 2.99,
+   "rawMs": 2.09,
+   "oursMs": 3.79,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.7 ms)"
+    "direct: ok (3.43 ms)"
    ]
   },
   {
@@ -86,15 +86,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.37,
-   "oursMs": 5.04,
+   "rawMs": 3.11,
+   "oursMs": 6.54,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.49 ms)"
+    "direct: ok (5.89 ms)"
    ]
   },
   {
@@ -105,15 +105,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 13.1,
-   "oursMs": 38.7,
+   "rawMs": 20.2,
+   "oursMs": 54.6,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (38.1 ms)"
+    "direct: ok (53.9 ms)"
    ]
   },
   {
@@ -124,8 +124,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 3.22,
-   "oursMs": 0.204,
+   "rawMs": 4.27,
+   "oursMs": 0.243,
    "strategy": "",
    "error": "A 25 mm fillet won't fit on the 4 mm straight edge (edge 1): the faces beside it only leave room for 20 mm.",
    "note": "",
@@ -144,17 +144,17 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 1.16,
-   "oursMs": 29.9,
+   "rawMs": 1.44,
+   "oursMs": 40.1,
    "strategy": "corner profile as a boolean",
    "error": "",
    "note": "needed: corner profile as a boolean",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the fillet surfaces couldn't be built (0.988 ms)",
-    "polynomial blend surface: the fillet surfaces couldn't be built (1.01 ms)",
-    "corner profile as a boolean: ok (20.9 ms)"
+    "direct: the fillet surfaces couldn't be built (1.24 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (1.25 ms)",
+    "corner profile as a boolean: ok (27.8 ms)"
    ]
   },
   {
@@ -165,8 +165,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 1.08,
-   "oursMs": 41.2,
+   "rawMs": 1.31,
+   "oursMs": 53.8,
    "strategy": "",
    "error": "The fillet fails on the 40 mm straight edge (edge 12). The largest radius that fits there is about 4.88 mm.",
    "note": "",
@@ -176,11 +176,11 @@
    ],
    "badFaces": [],
    "steps": [
-    "direct: the fillet surfaces couldn't be built (0.971 ms)",
-    "polynomial blend surface: the fillet surfaces couldn't be built (0.963 ms)",
-    "corner profile as a boolean: the blends would overlap (9.79 ms)",
-    "one edge at a time, biggest first: edge 12 failed on its own (5.48 ms)",
-    "one edge at a time, smallest first: edge 12 failed on its own (4.82 ms)"
+    "direct: the fillet surfaces couldn't be built (1.26 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (1.24 ms)",
+    "corner profile as a boolean: the blends would overlap (12.8 ms)",
+    "one edge at a time, biggest first: edge 12 failed on its own (7.19 ms)",
+    "one edge at a time, smallest first: edge 12 failed on its own (6.56 ms)"
    ]
   },
   {
@@ -191,8 +191,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 1.65,
-   "oursMs": 0.164,
+   "rawMs": 2.14,
+   "oursMs": 0.183,
    "strategy": "",
    "error": "A 4 mm fillet on the 40 mm straight edge (edge 10) runs off the end: the flat face (face 1) where the edge ends is only 4 mm across there. Use under 4 mm, or round that face's edges too.",
    "note": "",
@@ -213,15 +213,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.1,
-   "oursMs": 2.4,
+   "rawMs": 1.33,
+   "oursMs": 3.02,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.19 ms)"
+    "direct: ok (2.75 ms)"
    ]
   },
   {
@@ -232,15 +232,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 12.1,
-   "oursMs": 56.3,
+   "rawMs": 15.9,
+   "oursMs": 73,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (55 ms)"
+    "direct: ok (71.6 ms)"
    ]
   },
   {
@@ -251,15 +251,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.36,
-   "oursMs": 12.4,
+   "rawMs": 3.88,
+   "oursMs": 16.7,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (12.1 ms)"
+    "direct: ok (16.3 ms)"
    ]
   },
   {
@@ -270,15 +270,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 180,
-   "oursMs": 166,
+   "rawMs": 216,
+   "oursMs": 211,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (165 ms)"
+    "direct: ok (210 ms)"
    ]
   },
   {
@@ -289,15 +289,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 33.8,
-   "oursMs": 25.6,
+   "rawMs": 43.2,
+   "oursMs": 32.7,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (25.4 ms)"
+    "direct: ok (32.4 ms)"
    ]
   },
   {
@@ -308,8 +308,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "exception: There are no suitable edges for chamfer or fillet",
-   "rawMs": 0.181,
-   "oursMs": 0.042,
+   "rawMs": 0.205,
+   "oursMs": 0.05,
    "strategy": "",
    "error": "the 8 mm straight edge (edge 1) is already smooth (its faces meet tangentially), so there's nothing to round",
    "note": "",
@@ -327,15 +327,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 145,
-   "oursMs": 236,
+   "rawMs": 186,
+   "oursMs": 300,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (218 ms)"
+    "direct: ok (278 ms)"
    ]
   },
   {
@@ -346,15 +346,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.68,
-   "oursMs": 7.18,
+   "rawMs": 3.47,
+   "oursMs": 9.07,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.45 ms)"
+    "direct: ok (8.2 ms)"
    ]
   },
   {
@@ -365,15 +365,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.52,
-   "oursMs": 4.56,
+   "rawMs": 3.17,
+   "oursMs": 5.77,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.28 ms)"
+    "direct: ok (5.41 ms)"
    ]
   },
   {
@@ -384,15 +384,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 13.1,
-   "oursMs": 16.2,
+   "rawMs": 17,
+   "oursMs": 20.9,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (15.5 ms)"
+    "direct: ok (20.1 ms)"
    ]
   },
   {
@@ -403,8 +403,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 9.75,
-   "oursMs": 205,
+   "rawMs": 12.2,
+   "oursMs": 270,
    "strategy": "",
    "error": "The fillet fails on the 30 mm straight edge (edge 2). The largest radius that fits there is about 0.97 mm.",
    "note": "",
@@ -414,11 +414,11 @@
    ],
    "badFaces": [],
    "steps": [
-    "direct: the fillet surfaces couldn't be built (9.56 ms)",
-    "polynomial blend surface: the fillet surfaces couldn't be built (9.43 ms)",
-    "corner profile as a boolean: edges meet at a corner (0.47 ms)",
-    "one edge at a time, biggest first: edge 13 failed on its own (20 ms)",
-    "one edge at a time, smallest first: edge 13 failed on its own (19.7 ms)"
+    "direct: the fillet surfaces couldn't be built (12.3 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (12.4 ms)",
+    "corner profile as a boolean: edges meet at a corner (0.592 ms)",
+    "one edge at a time, biggest first: edge 13 failed on its own (25.6 ms)",
+    "one edge at a time, smallest first: edge 13 failed on its own (25.6 ms)"
    ]
   },
   {
@@ -429,15 +429,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 8.35,
-   "oursMs": 10.4,
+   "rawMs": 10.5,
+   "oursMs": 13.2,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (10 ms)"
+    "direct: ok (12.8 ms)"
    ]
   },
   {
@@ -448,15 +448,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.24,
-   "oursMs": 2.25,
+   "rawMs": 1.65,
+   "oursMs": 2.85,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.02 ms)"
+    "direct: ok (2.54 ms)"
    ]
   },
   {
@@ -467,15 +467,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.38,
-   "oursMs": 2.26,
+   "rawMs": 2.77,
+   "oursMs": 4.34,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.02 ms)"
+    "direct: ok (3.91 ms)"
    ]
   },
   {
@@ -503,15 +503,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.04,
-   "oursMs": 8.1,
+   "rawMs": 3.71,
+   "oursMs": 10,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (7.15 ms)"
+    "direct: ok (8.9 ms)"
    ]
   },
   {
@@ -522,8 +522,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 1.99,
-   "oursMs": 0.092,
+   "rawMs": 2.59,
+   "oursMs": 0.108,
    "strategy": "",
    "error": "A 6 mm chamfer won't fit on the 20 mm straight edge (edge 10): the faces beside it only leave room for 3.99 mm.",
    "note": "",
@@ -542,15 +542,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 5.84,
-   "oursMs": 6.76,
+   "rawMs": 5.26,
+   "oursMs": 8.15,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.15 ms)"
+    "direct: ok (7.63 ms)"
    ]
   },
   {
@@ -561,15 +561,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 4.07,
-   "oursMs": 6.16,
+   "rawMs": 5.17,
+   "oursMs": 7.77,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (5.75 ms)"
+    "direct: ok (7.28 ms)"
    ]
   },
   {
@@ -580,8 +580,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 5.22,
-   "oursMs": 0.047,
+   "rawMs": 6.53,
+   "oursMs": 0.056,
    "strategy": "",
    "error": "A 12 mm wall leaves no room inside: the body is only 20 mm across at its thinnest.",
    "note": "",
@@ -597,15 +597,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 10.8,
-   "oursMs": 17,
+   "rawMs": 13.5,
+   "oursMs": 21.1,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (15.1 ms)"
+    "direct: ok (18.9 ms)"
    ]
   },
   {
@@ -616,17 +616,17 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 9.68,
-   "oursMs": 51.2,
+   "rawMs": 12.1,
+   "oursMs": 63.2,
    "strategy": "intersection mode",
    "error": "",
    "note": "needed: intersection mode",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: thick solid failed (9.52 ms)",
-    "intersection join: thick solid failed (21.5 ms)",
-    "intersection mode: ok (18.2 ms)"
+    "direct: thick solid failed (11.9 ms)",
+    "intersection join: thick solid failed (26.9 ms)",
+    "intersection mode: ok (22.1 ms)"
    ]
   },
   {
@@ -637,18 +637,18 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "wrong result: volume 23924.1 outside 3000..9000",
-   "rawMs": 3.38,
-   "oursMs": 94.2,
+   "rawMs": 4.14,
+   "oursMs": 118,
    "strategy": "sharp inside corners (rounds tighter than the wall)",
    "error": "",
    "note": "needed: sharp inside corners (rounds tighter than the wall)",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the result is bigger than it can be (23924.1 mm³) (8.4 ms)",
-    "intersection join: the result is bigger than it can be (23924.1 mm³) (7.97 ms)",
-    "intersection mode: the result is bigger than it can be (23924.1 mm³) (39.3 ms)",
-    "sharp inside corners (rounds tighter than the wall): ok (31 ms)"
+    "direct: the result is bigger than it can be (23924.1 mm³) (10.2 ms)",
+    "intersection join: the result is bigger than it can be (23924.1 mm³) (10.8 ms)",
+    "intersection mode: the result is bigger than it can be (23924.1 mm³) (49.3 ms)",
+    "sharp inside corners (rounds tighter than the wall): ok (39 ms)"
    ]
   },
   {
@@ -659,15 +659,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.66,
-   "oursMs": 2.56,
+   "rawMs": 1.82,
+   "oursMs": 3.18,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.14 ms)"
+    "direct: ok (2.65 ms)"
    ]
   },
   {
@@ -678,15 +678,15 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "wrong result: volume 24429 outside 9076.3..9086.3",
-   "rawMs": 0.224,
-   "oursMs": 3.17,
+   "rawMs": 0.257,
+   "oursMs": 3.98,
    "strategy": "offset and cut",
    "error": "",
    "note": "needed: offset and cut",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "offset and cut: ok (2.78 ms)"
+    "offset and cut: ok (3.55 ms)"
    ]
   },
   {
@@ -697,15 +697,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 612,
-   "oursMs": 604,
+   "rawMs": 781,
+   "oursMs": 771,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (602 ms)"
+    "direct: ok (769 ms)"
    ]
   },
   {
@@ -716,19 +716,19 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "wrong result: volume 237852 outside 35677.7..95140.6",
-   "rawMs": 10.8,
-   "oursMs": 150,
+   "rawMs": 13.4,
+   "oursMs": 184,
    "strategy": "hollow, then open the faces",
    "error": "",
    "note": "needed: hollow, then open the faces",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the result is bigger than it can be (237852 mm³) (11.9 ms)",
-    "intersection join: the result is bigger than it can be (237852 mm³) (48.4 ms)",
-    "intersection mode: the result is bigger than it can be (237852 mm³) (12.8 ms)",
-    "offset and cut: the result is bigger than it can be (237852 mm³) (44.1 ms)",
-    "hollow, then open the faces: ok (32.1 ms)"
+    "direct: the result is bigger than it can be (237852 mm³) (15.5 ms)",
+    "intersection join: the result is bigger than it can be (237852 mm³) (57.1 ms)",
+    "intersection mode: the result is bigger than it can be (237852 mm³) (15.9 ms)",
+    "offset and cut: the result is bigger than it can be (237852 mm³) (53.7 ms)",
+    "hollow, then open the faces: ok (40.2 ms)"
    ]
   },
   {
@@ -739,15 +739,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 7.51,
-   "oursMs": 8.68,
+   "rawMs": 6.88,
+   "oursMs": 10.9,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (7.87 ms)"
+    "direct: ok (9.93 ms)"
    ]
   },
   {
@@ -758,15 +758,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 4.87,
-   "oursMs": 40.8,
+   "rawMs": 5.05,
+   "oursMs": 53,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (39.4 ms)"
+    "direct: ok (51.6 ms)"
    ]
   },
   {
@@ -777,15 +777,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 6.62,
-   "oursMs": 14.8,
+   "rawMs": 7.45,
+   "oursMs": 18,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (14.2 ms)"
+    "direct: ok (17.3 ms)"
    ]
   },
   {
@@ -796,15 +796,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 5.2,
-   "oursMs": 6.28,
+   "rawMs": 6.54,
+   "oursMs": 7.97,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (5.89 ms)"
+    "direct: ok (7.51 ms)"
    ]
   },
   {
@@ -815,15 +815,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 11.6,
-   "oursMs": 43.4,
+   "rawMs": 15.3,
+   "oursMs": 52.5,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (42.4 ms)"
+    "direct: ok (51.4 ms)"
    ]
   },
   {
@@ -834,15 +834,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 7.38,
-   "oursMs": 7.48,
+   "rawMs": 5.93,
+   "oursMs": 9.59,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.82 ms)"
+    "direct: ok (8.76 ms)"
    ]
   },
   {
@@ -853,15 +853,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.72,
-   "oursMs": 7.11,
+   "rawMs": 3.18,
+   "oursMs": 9.05,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.56 ms)"
+    "direct: ok (8.38 ms)"
    ]
   },
   {
@@ -872,17 +872,17 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "wrong result: invalid B-rep",
-   "rawMs": 11.5,
-   "oursMs": 1134.59,
+   "rawMs": 15,
+   "oursMs": 1419.59,
    "strategy": "",
    "error": "The faces couldn't be thickened by 3 mm: they curve more tightly than that somewhere, or fold back on themselves.",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the result is smaller than it can be (4247.16 mm³) (375 ms)",
-    "simple thicken: the result is smaller than it can be (4138.95 mm³) (369 ms)",
-    "arc join: the result isn't a valid solid (377 ms)"
+    "direct: the result is smaller than it can be (4247.16 mm³) (471 ms)",
+    "simple thicken: the result is smaller than it can be (4138.95 mm³) (461 ms)",
+    "arc join: the result isn't a valid solid (471 ms)"
    ]
   },
   {
@@ -893,15 +893,15 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 7.73,
-   "oursMs": 106,
+   "rawMs": 9.79,
+   "oursMs": 132,
    "strategy": "sharp corners where rounds collapse",
    "error": "",
    "note": "needed: sharp corners where rounds collapse",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "sharp corners where rounds collapse: ok (104 ms)"
+    "sharp corners where rounds collapse: ok (130 ms)"
    ]
   },
   {
@@ -912,17 +912,17 @@
    "status": "fixed",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 13.8,
-   "oursMs": 38.8,
+   "rawMs": 17.7,
+   "oursMs": 49.3,
    "strategy": "intersection mode",
    "error": "",
    "note": "needed: intersection mode",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the result is smaller than it can be (0 mm³) (13.3 ms)",
-    "intersection join: the result is smaller than it can be (0 mm³) (3.87 ms)",
-    "intersection mode: ok (20.9 ms)"
+    "direct: the result is smaller than it can be (0 mm³) (17 ms)",
+    "intersection join: the result is smaller than it can be (0 mm³) (4.97 ms)",
+    "intersection mode: ok (26.4 ms)"
    ]
   },
   {
@@ -933,15 +933,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 6.16,
-   "oursMs": 2.55,
+   "rawMs": 7.86,
+   "oursMs": 3.26,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.01 ms)"
+    "direct: ok (2.58 ms)"
    ]
   },
   {
@@ -952,15 +952,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.76,
-   "oursMs": 5.41,
+   "rawMs": 3.92,
+   "oursMs": 10.5,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.8 ms)"
+    "direct: ok (9.78 ms)"
    ]
   },
   {
@@ -971,8 +971,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "exception: Standard_ConstructionError",
-   "rawMs": 0.138,
-   "oursMs": 0.038,
+   "rawMs": 0.143,
+   "oursMs": 0.048,
    "strategy": "",
    "error": "the flat face (face 6) faces straight along the pull direction, so it can't be drafted (it would tilt sideways). Draft the side walls instead.",
    "note": "",
@@ -990,15 +990,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.85,
-   "oursMs": 7.78,
+   "rawMs": 3.39,
+   "oursMs": 6.89,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.8 ms)"
+    "direct: ok (6.08 ms)"
    ]
   },
   {
@@ -1009,15 +1009,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 0.53,
-   "oursMs": 0.951,
+   "rawMs": 0.617,
+   "oursMs": 1.18,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (0.897 ms)"
+    "direct: ok (1.13 ms)"
    ]
   },
   {
@@ -1028,15 +1028,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.39,
-   "oursMs": 4.4,
+   "rawMs": 4.06,
+   "oursMs": 5.47,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.13 ms)"
+    "direct: ok (5.15 ms)"
    ]
   },
   {
@@ -1047,15 +1047,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.74,
-   "oursMs": 3.83,
+   "rawMs": 3.39,
+   "oursMs": 4.79,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (3.59 ms)"
+    "direct: ok (4.48 ms)"
    ]
   },
   {
@@ -1066,15 +1066,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.57,
-   "oursMs": 3.14,
+   "rawMs": 3.16,
+   "oursMs": 3.93,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (3.11 ms)"
+    "direct: ok (3.9 ms)"
    ]
   },
   {
@@ -1085,15 +1085,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 6.2,
-   "oursMs": 7.89,
+   "rawMs": 7.7,
+   "oursMs": 8.93,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (7.65 ms)"
+    "direct: ok (8.66 ms)"
    ]
   },
   {
@@ -1104,15 +1104,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1.15,
-   "oursMs": 1.54,
+   "rawMs": 1.41,
+   "oursMs": 1.98,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (1.32 ms)"
+    "direct: ok (1.71 ms)"
    ]
   },
   {
@@ -1123,15 +1123,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.78,
-   "oursMs": 3.75,
+   "rawMs": 3.51,
+   "oursMs": 4.7,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (3.5 ms)"
+    "direct: ok (4.39 ms)"
    ]
   },
   {
@@ -1142,15 +1142,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.18,
-   "oursMs": 2.64,
+   "rawMs": 2.61,
+   "oursMs": 3.25,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (2.38 ms)"
+    "direct: ok (2.93 ms)"
    ]
   },
   {
@@ -1161,15 +1161,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.98,
-   "oursMs": 3.83,
+   "rawMs": 5.07,
+   "oursMs": 4.79,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (3.57 ms)"
+    "direct: ok (4.48 ms)"
    ]
   },
   {
@@ -1180,15 +1180,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 2.77,
-   "oursMs": 3.49,
+   "rawMs": 3.43,
+   "oursMs": 4.33,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (3.25 ms)"
+    "direct: ok (4.06 ms)"
    ]
   },
   {
@@ -1199,15 +1199,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 4.36,
-   "oursMs": 4.67,
+   "rawMs": 5.35,
+   "oursMs": 5.89,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.64 ms)"
+    "direct: ok (5.85 ms)"
    ]
   },
   {
@@ -1218,15 +1218,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 5.26,
-   "oursMs": 5.73,
+   "rawMs": 6.31,
+   "oursMs": 7.07,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (5.68 ms)"
+    "direct: ok (7.03 ms)"
    ]
   },
   {
@@ -1237,15 +1237,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 9.43,
-   "oursMs": 11,
+   "rawMs": 11.8,
+   "oursMs": 14.3,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (10.3 ms)"
+    "direct: ok (13.4 ms)"
    ]
   },
   {
@@ -1256,15 +1256,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 3.02,
-   "oursMs": 4.34,
+   "rawMs": 3.59,
+   "oursMs": 5.39,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (4.02 ms)"
+    "direct: ok (4.99 ms)"
    ]
   },
   {
@@ -1275,15 +1275,15 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "wrong result: 0 solids, expected 1",
-   "rawMs": 1.62,
-   "oursMs": 1.35,
+   "rawMs": 1.94,
+   "oursMs": 1.7,
    "strategy": "",
    "error": "The cut removes the whole body",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: the result has no solid left (1.32 ms)"
+    "direct: the result has no solid left (1.67 ms)"
    ]
   },
   {
@@ -1294,15 +1294,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 5.24,
-   "oursMs": 6.14,
+   "rawMs": 6.63,
+   "oursMs": 7.65,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (6.11 ms)"
+    "direct: ok (7.62 ms)"
    ]
   },
   {
@@ -1313,15 +1313,15 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 4.35,
-   "oursMs": 6.95,
+   "rawMs": 5.25,
+   "oursMs": 8.49,
    "strategy": "direct",
    "error": "",
    "note": "",
    "badEdges": [],
    "badFaces": [],
    "steps": [
-    "direct: ok (5.22 ms)"
+    "direct: ok (6.37 ms)"
    ]
   },
   {
@@ -1332,8 +1332,8 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1653.97,
-   "oursMs": 2737.62,
+   "rawMs": 2045.49,
+   "oursMs": 3345.64,
    "strategy": "tidy after every step",
    "error": "",
    "note": "max tolerance 1.5e-07 mm",
@@ -1349,8 +1349,8 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 43.7,
-   "oursMs": 7.8,
+   "rawMs": 58.1,
+   "oursMs": 10.9,
    "strategy": "direct",
    "error": "",
    "note": "",
@@ -1366,8 +1366,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "wrong result: 0 solids, expected 1",
-   "rawMs": 4.66,
-   "oursMs": 13.6,
+   "rawMs": 6.03,
+   "oursMs": 20.1,
    "strategy": "healed",
    "error": "The body has a hole in it (a face is missing), so it came in as a surface body: the body has gaps between its faces, so it stays a surface body",
    "note": "the body has gaps between its faces, so it stays a surface body",
@@ -1385,8 +1385,8 @@
    "status": "clear",
    "rawOk": false,
    "rawWhy": "not done",
-   "rawMs": 0.578,
-   "oursMs": 0.472,
+   "rawMs": 0.756,
+   "oursMs": 0.585,
    "strategy": "",
    "error": "The file couldn't be read: it is cut short or isn't STEP.",
    "note": "",
@@ -1402,8 +1402,8 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 845,
-   "oursMs": 1262.44,
+   "rawMs": 1077.14,
+   "oursMs": 1629.35,
    "strategy": "one boolean, all tools",
    "error": "",
    "note": "",
@@ -1419,8 +1419,8 @@
    "status": "pass",
    "rawOk": true,
    "rawWhy": "",
-   "rawMs": 1720.83,
-   "oursMs": 3196.92,
+   "rawMs": 2170.04,
+   "oursMs": 3991.26,
    "strategy": "100 booleans",
    "error": "",
    "note": "",
