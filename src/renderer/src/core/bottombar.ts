@@ -21,6 +21,7 @@ const TYPES: Record<keyof SelectFilter, { label: string; icon: string; key: stri
 }
 
 let bar: HTMLElement | null = null
+const LETTER_OF: Record<string, string> = { all: 'C', body: 'E', vertex: 'P', face: 'F', edge: 'D', surface: 'S' }
 
 export function addBottomButton(icon: string, title: string, onClick: (b: HTMLButtonElement) => void): HTMLButtonElement {
   const b = el('button', 'vb-btn')
@@ -45,7 +46,7 @@ export function startBottomBar(ctx: ModuleContext): void {
   const cell = (id: string, icon: string, label: string, key: string, onClick: (e: MouseEvent) => void): void => {
     const c = el('button', 'vf-btn')
     c.innerHTML = icon
-    c.title = `${label} (${key})${id === 'all' ? '' : ' · Ctrl+click to combine'}`
+    c.title = `${label} (${key}${LETTER_OF[id] ? ` or ${LETTER_OF[id]} during a command` : ''})${id === 'all' ? '' : ' · Ctrl+click to combine'}`
     c.addEventListener('click', onClick)
     cells.set(id, c)
     palette.append(c)
@@ -140,4 +141,24 @@ export function startBottomBar(ctx: ModuleContext): void {
     const k = FILTER_KEYS.find((x) => TYPES[x].key === e.key)
     if (k) selectFilter.set(only(k))
   })
+  // During a command (VISI-style): C combined / everything, E elements (bodies),
+  // P points, F faces, D edges, S surfaces. Caught first so they don't run
+  // the ribbon shortcuts that share those letters.
+  const LETTERS: Record<string, keyof SelectFilter | 'all'> = { c: 'all', e: 'body', p: 'vertex', f: 'face', d: 'edge', s: 'surface' }
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || !commandRunning()) return
+      const t = e.target as HTMLElement
+      // Letters mean nothing in a number box, so they still switch the filter there.
+      const numberBox = t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'number'
+      if (!numberBox && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      const k = LETTERS[e.key.toLowerCase()]
+      if (!k) return
+      e.preventDefault()
+      e.stopPropagation()
+      selectFilter.set(k === 'all' ? EVERYTHING : only(k))
+    },
+    true
+  )
 }
