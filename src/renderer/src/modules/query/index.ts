@@ -5,6 +5,7 @@ import { hoverInfoEnabled, setHoverInfo, startHoverInfo } from '@/core/hoverinfo
 import { closeDimensionTool, dimToolKind, openDimensionTool, type DimKind } from '@/core/dimtool'
 import { dimsShown, setDimsShown, startDimensions } from '@/core/dimensions'
 import { closeBoundingBox, isBoundingBoxOpen, openBoundingBox } from '@/core/bbox'
+import { closeThickness, isThicknessOpen, openThickness } from '@/core/thickness'
 
 /**
  * Query: inspect the model without changing it. Measure, bounding box, and the
@@ -54,6 +55,15 @@ export const queryModule: CadModule = {
           isEnabled: (ctx) => !ctx.doc.isEmpty(),
           isActive: () => isBoundingBoxOpen(),
           run: (ctx) => (isBoundingBoxOpen() ? closeBoundingBox() : openBoundingBox(ctx))
+        },
+        {
+          id: 'query.thickness',
+          label: 'Query thickness',
+          icon: icons.thickness,
+          tooltip: 'Click a point on a face: the wall thickness there, straight through the body',
+          isEnabled: (ctx) => !ctx.doc.isEmpty(),
+          isActive: () => isThicknessOpen(),
+          run: (ctx) => (isThicknessOpen() ? closeThickness() : openThickness(ctx))
         }
       ]
     },

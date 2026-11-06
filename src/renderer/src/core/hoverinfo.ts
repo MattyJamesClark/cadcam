@@ -3,7 +3,7 @@ import { measureCad } from './occt'
 import { pickKey, rowMajor, type Pick } from './picking'
 import { selection } from './selection'
 import { el, fmt } from './toolpanel'
-import type * as THREE from 'three'
+import * as THREE from 'three'
 
 /**
  * Hover info: with no tool running, the face / edge / point under the
@@ -33,6 +33,7 @@ export function startHoverInfo(ctx: ModuleContext): void {
 class HoverInfo {
   private hover: Pick | null = null
   private label = el('div', 'hover-label')
+  private base = ''
   private cache = new Map<string, string>()
   private lastXY = { x: 0, y: 0 }
 
@@ -44,7 +45,10 @@ class HoverInfo {
       const changed = (pick && pickKey(pick)) !== (this.hover && pickKey(this.hover))
       this.hover = pick
       if (changed) void this.refresh()
-      else this.placeHover()
+      else {
+        this.show()
+        this.placeHover()
+      }
     })
     // The model changed: labels may be stale.
     ctx.doc.history.on('changed', () => {
@@ -64,10 +68,29 @@ class HoverInfo {
     if (!hover || !enabled) return
     const text = await this.textOf(hover)
     if (hover === this.hover && text) {
-      this.label.textContent = text
+      this.base = text
+      this.show()
       this.label.hidden = false
       this.placeHover()
     }
+  }
+
+  /** Base text plus, on faces, the live Z height and draft angle against the active workplane. */
+  private show(): void {
+    const p = this.hover
+    if (!p || !this.base) return
+    let live = ''
+    if (p.kind === 'face') {
+      const work = this.ctx.viewport.workplane
+      const z = p.point.clone().applyMatrix4(work.clone().invert()).z
+      live = `   Z ${fmt(z)}`
+      if (p.normal) {
+        const axis = new THREE.Vector3(0, 0, 1).transformDirection(work)
+        const draft = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(p.normal.dot(axis), -1, 1)))
+        live += Math.abs(Math.abs(draft) - 90) < 0.005 ? '   Flat' : `   Draft ${fmt(draft, 2)}°`
+      }
+    }
+    this.label.textContent = this.base + live
   }
 
   private placeHover(): void {

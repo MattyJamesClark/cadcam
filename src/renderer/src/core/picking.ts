@@ -67,6 +67,8 @@ export interface Pick {
   point: THREE.Vector3
   /** For kind 'point' on CAD bodies: which snap point it is. */
   snap?: SnapKind
+  /** For face picks: the surface normal where the pointer hit (world). */
+  normal?: THREE.Vector3
 }
 
 export const pickKey = (p: Pick): string => `${p.object.uuid}:${p.kind}:${p.index}:${p.kind === 'point' ? p.point.toArray().join(',') : ''}`
@@ -189,7 +191,7 @@ export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f:
   if (filter.face && !isWire) {
     const triFace = geo.userData.triFace as Int32Array | undefined
     if (triFace && hit.faceIndex != null && triFace[hit.faceIndex] >= 0)
-      return { kind: 'face', object: obj, index: triFace[hit.faceIndex], point: hit.point.clone() }
+      return { kind: 'face', object: obj, index: triFace[hit.faceIndex], point: hit.point.clone(), normal: hit.face ? hit.face.normal.clone().transformDirection(obj.matrixWorld) : undefined }
     // A plain mesh has no faces of its own: the face filter picks the whole mesh.
     if (!brep) return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
   }
