@@ -359,6 +359,58 @@ export class CadDocument extends Emitter<DocEvents> {
     this.history.record({ label: list.length === 1 ? `Move ${list[0].name}` : `Move ${list.length} items`, undo: () => apply(false), redo: () => apply(true) })
   }
 
+  /** Apply a world-space transform (e.g. a rotation about an axis) to nodes. One undo step. */
+  transformWorld(ids: string[], m: THREE.Matrix4, label: string): void {
+    const list = this.topOf(ids)
+    if (!list.length) return
+    const moves = list.map((n) => {
+      const from = n.object.matrix.clone()
+      return { n, from, to: localTransform(n.object, m) }
+    })
+    const apply = (to: boolean): void => {
+      for (const mv of moves) {
+        ;(to ? mv.to : mv.from).decompose(mv.n.object.position, mv.n.object.quaternion, mv.n.object.scale)
+        mv.n.object.updateMatrixWorld(true)
+      }
+      this.emit('changed', undefined)
+    }
+    apply(true)
+    this.history.record({ label: list.length === 1 ? `${label} ${list[0].name}` : `${label} ${list.length} items`, undo: () => apply(false), redo: () => apply(true) })
+  }
+
+  /** Copies of nodes, the k-th one transformed by step^k (world space). One undo step; selects the copies. */
+  duplicateTransformed(ids: string[], step: THREE.Matrix4, count: number): DocNode[] {
+    const list = this.topOf(ids)
+    if (!list.length || count < 1) return []
+    const made: DocNode[] = []
+    this.history.batch(count * list.length === 1 ? `Copy ${list[0].name}` : `Copy ${list.length} item(s) × ${count}`, () => {
+      for (const n of list) {
+        let w = new THREE.Matrix4()
+        for (let k = 1; k <= count; k++) {
+          w = step.clone().multiply(w)
+          const obj = n.object.clone(true)
+          obj.traverse((o) => {
+            const mm = o as THREE.Mesh
+            if (mm.material) mm.material = Array.isArray(mm.material) ? mm.material.map((x) => x.clone()) : mm.material.clone()
+          })
+          localTransform(n.object, w).decompose(obj.position, obj.quaternion, obj.scale)
+          const parentObj = n.object.parent ?? this.root
+          const copy = this.cloneTree(n, obj, n.parent)
+          copy.name = this.uniqueName(n.name, n.parent)
+          const siblings = n.parent ? n.parent.children : this.roots
+          siblings.splice(siblings.indexOf(n) + k, 0, copy)
+          parentObj.add(obj)
+          this.recordAdd(copy, `Copy ${n.name}`)
+          made.push(copy)
+        }
+      }
+    })
+    this.selected = new Set(made.map((m) => m.id))
+    this.emit('selection', this.selection())
+    this.emit('changed', undefined)
+    return made
+  }
+
   /** Copies of nodes, the k-th one moved by k × delta (world space). One undo step; selects the copies. */
   duplicate(ids: string[], delta: THREE.Vector3, count: number): DocNode[] {
     const list = this.topOf(ids)
@@ -770,6 +822,13 @@ function disposeObject(o: THREE.Object3D): void {
 }
 
 /** `delta` (world space) as a change of `o.position` (its parent's space). */
+/** The object's local matrix after applying world transform m to it. */
+function localTransform(o: THREE.Object3D, m: THREE.Matrix4): THREE.Matrix4 {
+  o.updateMatrixWorld(true)
+  const parentWorld = o.parent ? o.parent.matrixWorld.clone() : new THREE.Matrix4()
+  return parentWorld.clone().invert().multiply(m).multiply(o.matrixWorld)
+}
+
 function localDelta(o: THREE.Object3D, delta: THREE.Vector3): THREE.Vector3 {
   const parent = o.parent
   if (!parent) return delta.clone()

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { openTranslate } from '@/core/translate'
+import { openRotate } from '@/core/rotate'
 import { importerFor, listExporters, listImporters, loadFile, partMaterial, unsupportedReason } from '@/core/io'
 import { icons } from '@/core/icons'
 import type { CadModule, ModuleContext } from '@/core/types'
@@ -395,6 +396,15 @@ export const homeModule: CadModule = {
           tooltip: 'Move or copy the selection by a distance (on-screen handle or typed values)',
           isEnabled: (ctx) => ctx.doc.selection().length > 0,
           run: (ctx) => openTranslate(ctx)
+        },
+        {
+          id: 'edit.rotate',
+          label: 'Rotate',
+          icon: icons.rotate,
+          shortcut: 'R',
+          tooltip: 'Rotate the selection about an axis, or make rotated copies (Copy + number of copies)',
+          isEnabled: (ctx) => ctx.doc.selection().length > 0,
+          run: (ctx) => openRotate(ctx)
         },
         {
           id: 'edit.delete',

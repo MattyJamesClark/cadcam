@@ -381,3 +381,5 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .sb-icon svg { width: 13px; height: 13px; }
 .sb-icon:hover { background: var(--panel-3); color: var(--text); }
 .sb-icon.narrowed { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.vs-axis.on, .rotate-strip .btn.on { background: color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); }
+.vs-angle { width: 56px; height: 22px; font-size: 12px; padding: 0 4px; }
