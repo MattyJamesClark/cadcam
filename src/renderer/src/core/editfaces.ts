@@ -37,6 +37,8 @@ class EditFacesTool {
   private preview: THREE.Mesh | null = null
   private result: THREE.BufferGeometry | null = null
   private runId = 0
+  /** Per-vertex move direction for the instant preview (local space), for the current faces. */
+  private dirs: { key: string; dir: Float32Array } | null = null
   private timer = 0
   private busy = false
   private off: (() => void)[] = []
@@ -174,7 +176,9 @@ class EditFacesTool {
           this.distance = v
           this.distBox.value = fmt(v)
           this.schedule()
-        }
+        },
+        // Exact kernel result once the drag stops.
+        onEnd: () => this.schedule()
       })
     this.arrow.origin.copy(f.point)
     this.arrow.dir.copy(f.normal)
@@ -192,14 +196,115 @@ class EditFacesTool {
   private schedule(): void {
     window.clearTimeout(this.timer)
     this.result = null
+    this.runId++
+    this.busy = false
     this.say()
-    this.timer = window.setTimeout(() => void this.compute(), 250)
+    // Instant mesh preview that follows the cursor; the exact solid comes after.
+    this.fastPreview()
+    if (!this.handles.dragging) this.timer = window.setTimeout(() => void this.compute(), 120)
+  }
+
+  /**
+   * Quick preview without the kernel: every mesh vertex on a chosen face's
+   * outline or inside it moves along that face's normal (side walls stretch
+   * with it). Close enough to drag against; the exact result replaces it.
+   */
+  private fastPreview(): void {
+    if (!this.faces.length || !this.distance) return this.clearPreview()
+    const mesh = this.faces[0].object as THREE.Mesh
+    const geo = mesh.geometry
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute
+    const index = geo.index
+    const triFace = geo.userData.triFace as Int32Array | undefined
+    if (!index || !triFace) return
+    const key = this.faces.map(pickKey).sort().join('|')
+    if (this.dirs?.key !== key) this.dirs = { key, dir: this.moveDirs(geo, new Set(this.faces.map((f) => f.index))) }
+    const dir = this.dirs.dir
+    const base = pos.array as ArrayLike<number>
+    const out = new Float32Array(base.length)
+    const d = this.distance
+    for (let i = 0; i < out.length; i++) out[i] = base[i] + dir[i] * d
+    let g = this.preview?.userData.fast ? this.preview.geometry : null
+    if (!g || (g.getAttribute('position') as THREE.BufferAttribute).count !== pos.count) {
+      g = new THREE.BufferGeometry()
+      g.setIndex(index)
+      if (geo.getAttribute('normal')) g.setAttribute('normal', geo.getAttribute('normal'))
+      g.setAttribute('position', new THREE.BufferAttribute(out, 3))
+      this.showPreview(g, mesh)
+      this.preview!.userData.fast = true
+    } else {
+      ;(g.getAttribute('position') as THREE.BufferAttribute).copyArray(out).needsUpdate = true
+      g.computeBoundingSphere()
+      this.ctx.viewport.requestRender()
+    }
+  }
+
+  private moveDirs(geo: THREE.BufferGeometry, faces: Set<number>): Float32Array {
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute
+    const index = geo.index!
+    const triFace = geo.userData.triFace as Int32Array
+    const k = (i: number): string => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`
+    // Normals of the chosen faces met at each vertex position.
+    const at = new Map<string, THREE.Vector3[]>()
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3()
+    const faceN = new Map<number, THREE.Vector3>()
+    for (let t = 0; t < triFace.length; t++) {
+      if (!faces.has(triFace[t])) continue
+      a.fromBufferAttribute(pos, index.getX(t * 3))
+      b.fromBufferAttribute(pos, index.getX(t * 3 + 1))
+      c.fromBufferAttribute(pos, index.getX(t * 3 + 2))
+      const n = b.clone().sub(a).cross(c.clone().sub(a))
+      const acc = faceN.get(triFace[t]) ?? new THREE.Vector3()
+      faceN.set(triFace[t], acc.add(n))
+    }
+    faceN.forEach((n) => n.normalize())
+    for (let t = 0; t < triFace.length; t++) {
+      const f = triFace[t]
+      if (!faces.has(f)) continue
+      for (let j = 0; j < 3; j++) {
+        const v = index.getX(t * 3 + j)
+        // Flat faces move along the face normal; curved ones along each vertex's own normal.
+        const nAttr = geo.getAttribute('normal') as THREE.BufferAttribute | undefined
+        const vn = nAttr ? new THREE.Vector3().fromBufferAttribute(nAttr, v) : faceN.get(f)!
+        const n = faceN.get(f)!.dot(vn) > 0.999 ? faceN.get(f)! : vn.clone().normalize()
+        const list = at.get(k(v)) ?? []
+        if (!list.some((m) => m.dot(n) > 0.999)) list.push(n)
+        at.set(k(v), list)
+      }
+    }
+    const dir = new Float32Array(pos.count * 3)
+    const o = new THREE.Vector3()
+    for (let v = 0; v < pos.count; v++) {
+      const list = at.get(k(v))
+      if (!list) continue
+      // Offset that lands on every moved face's plane (corners where two meet).
+      o.set(0, 0, 0)
+      for (let it = 0; it < 12; it++) for (const n of list) o.addScaledVector(n, 1 - n.dot(o))
+      dir[v * 3] = o.x
+      dir[v * 3 + 1] = o.y
+      dir[v * 3 + 2] = o.z
+    }
+    return dir
+  }
+
+  private showPreview(geo: THREE.BufferGeometry, mesh: THREE.Mesh): void {
+    this.clearPreview()
+    mesh.updateMatrixWorld()
+    this.preview = new THREE.Mesh(geo, PREVIEW)
+    this.preview.matrixAutoUpdate = false
+    this.preview.matrix.copy(mesh.matrixWorld)
+    this.preview.raycast = () => {}
+    this.preview.renderOrder = 5
+    this.ctx.viewport.scene.add(this.preview)
+    this.ctx.viewport.requestRender()
   }
 
   private async compute(): Promise<THREE.BufferGeometry | null> {
     const id = ++this.runId
-    this.clearPreview()
-    if (!this.faces.length || !this.distance) return null
+    if (!this.faces.length || !this.distance) {
+      this.clearPreview()
+      return null
+    }
     const mesh = this.faces[0].object as THREE.Mesh
     this.busy = true
     this.say('Working…')
@@ -219,13 +324,7 @@ class EditFacesTool {
       if (!m.matrixWorld.equals(new THREE.Matrix4())) geo.applyMatrix4(m.matrixWorld)
       geo.computeBoundingBox()
       this.result = geo
-      mesh.updateMatrixWorld()
-      this.preview = new THREE.Mesh(geo, PREVIEW)
-      this.preview.matrixAutoUpdate = false
-      this.preview.matrix.copy(mesh.matrixWorld)
-      this.preview.raycast = () => {}
-      this.preview.renderOrder = 5
-      this.ctx.viewport.scene.add(this.preview)
+      this.showPreview(geo, mesh)
       this.say(`${this.distance > 0 ? 'Out' : 'In'} ${fmt(Math.abs(this.distance))} mm`)
       this.ctx.viewport.requestRender()
       return geo
