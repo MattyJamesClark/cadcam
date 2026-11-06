@@ -6,7 +6,7 @@ name: CAD kernel
 # releases don't depend on this (slow) build.
 on:
   push:
-    paths: ['kernel/*.cpp', 'kernel/*.sh', 'kernel/*.mjs', '.github/workflows/kernel.yml']
+    paths: ['kernel/*.cpp', 'kernel/*.hxx', 'kernel/*.sh', 'kernel/*.mjs', '.github/workflows/kernel.yml']
   workflow_dispatch:
 
 permissions:
@@ -73,6 +73,9 @@ jobs:
           kernel/build.sh
         env:
           VARIANT: ${{ matrix.variant }}
+      # The stress tests run on the kernel just built; the scoreboard is committed with it.
+      - name: Kernel stress tests
+        run: node kernel/scoreboard.mjs out
       # Commit the built kernel next to its worker on this branch, so it can be
       # tested and then merged into main with the app changes that use it.
       - name: Commit kernel
@@ -83,6 +86,6 @@ jobs:
           cp out/LICENSE* $dest/ 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add $dest
+          git add $dest docs/kernel
           git commit -m "Built CAD kernel ($(cat out/BUILD.txt))" || exit 0
           for i in 1 2 3 4; do git pull --rebase -q origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break; sleep 5; done

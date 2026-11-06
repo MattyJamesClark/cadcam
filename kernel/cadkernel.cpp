@@ -120,6 +120,9 @@
 #include <string>
 #include <vector>
 
+#include "robust.hxx"
+#include "stress.hxx"
+
 using emscripten::val;
 
 namespace {
@@ -1450,38 +1453,14 @@ TopoDS_Shape prism(const TopoDS_Face& f, const gp_Dir& n, const gp_Pnt& origin, 
   return da.Shape();
 }
 
+/** Add / cut / intersect through our layer (retries, fuzzy tolerances, no lost bodies). */
 TopoDS_Shape boolean(const std::string& op, const TopoDS_Shape& a, const std::vector<TopoDS_Shape>& tools) {
-  TopTools_ListOfShape args, tl;
-  args.Append(a);
-  for (auto& t : tools) tl.Append(t);
-  TopoDS_Shape r;
-  if (op == "fuse") {
-    BRepAlgoAPI_Fuse b;
-    b.SetArguments(args);
-    b.SetTools(tl);
-    b.Build();
-    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The bodies couldn't be added together");
-    r = b.Shape();
-  } else if (op == "cut") {
-    BRepAlgoAPI_Cut b;
-    b.SetArguments(args);
-    b.SetTools(tl);
-    b.Build();
-    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The cut couldn't be made");
-    r = b.Shape();
-  } else if (op == "common") {
-    BRepAlgoAPI_Common b;
-    b.SetArguments(args);
-    b.SetTools(tl);
-    b.Build();
-    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The intersection couldn't be made");
-    r = b.Shape();
-  } else {
-    throw std::runtime_error("Unknown boolean " + op);
+  const rk::Bool b = op == "fuse" ? rk::Bool::Fuse : op == "cut" ? rk::Bool::Cut : op == "common" ? rk::Bool::Common : throw std::runtime_error("Unknown boolean " + op);
+  rk::Result r = rk::boolean(b, a, tools);
+  if (!r.ok()) {
+    throw std::runtime_error(r.error);
   }
-  ShapeUpgrade_UnifySameDomain unify(r, true, true, true);
-  unify.Build();
-  return unify.Shape();
+  return r.shape;
 }
 
 int countSolids(const TopoDS_Shape& s) {
@@ -1666,6 +1645,129 @@ val solid(val items, val spec) {
   }
 }
 
+namespace {
+TopoDS_Shape shapeOf(const val& it) {
+  const int key = it["key"].as<int>();
+  if (has(it, "brep")) {
+    std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(it["brep"]);
+    std::istringstream is(std::string(bytes.begin(), bytes.end()));
+    TopoDS_Shape sh;
+    BinTools::Read(sh, is);
+    g_shapes[key] = sh;
+  }
+  auto found = g_shapes.find(key);
+  if (found == g_shapes.end()) throw std::runtime_error("missing-shape");
+  return found->second;
+}
+
+val intArray(const std::vector<int>& v) {
+  val a = val::array();
+  for (int x : v) a.call<void>("push", x);
+  return a;
+}
+
+std::vector<int> intsOf(const val& v) {
+  std::vector<int> out;
+  if (v.isUndefined() || v.isNull()) return out;
+  for (int i = 0, n = v["length"].as<int>(); i < n; i++) out.push_back(v[i].as<int>());
+  return out;
+}
+
+val resultVal(const rk::Result& r) {
+  val res = val::object();
+  val steps = val::array();
+  for (auto& s : r.steps) steps.call<void>("push", s);
+  res.set("steps", steps);
+  if (!r.ok()) {
+    res.set("error", r.error.empty() ? std::string("The operation failed") : r.error);
+    res.set("badEdges", intArray(r.badEdges));
+    res.set("badFaces", intArray(r.badFaces));
+    if (!std::isnan(r.hint)) res.set("hint", r.hint);
+    return res;
+  }
+  std::ostringstream os;
+  BRepTools::Write(r.shape, os);
+  const std::string str = os.str();
+  res.set("brep", val(emscripten::typed_memory_view(str.size(), reinterpret_cast<const uint8_t*>(str.data()))).call<val>("slice"));
+  res.set("solids", rk::count(r.shape, TopAbs_SOLID));
+  res.set("volume", rk::volume(r.shape));
+  res.set("strategy", r.strategy);
+  val notes = val::array();
+  for (auto& s : r.notes) notes.call<void>("push", s);
+  res.set("notes", notes);
+  return res;
+}
+}  // namespace
+
+/**
+ * Change a body through our robust layer (kernel/robust.hxx).
+ * item = { key, brep? }
+ * spec = { op: 'fillet' | 'chamfer', edges: [{ edge, r1, r2?, angle? }] }
+ *      | { op: 'shell', faces: [open face...], thickness, outward? }
+ *      | { op: 'offset', distance }                     whole body grows (+) / shrinks (-)
+ *      | { op: 'thicken', faces?: [...], distance }     faces (or the whole surface body) into a solid
+ *      | { op: 'draft', faces, angle, pull: [x,y,z], origin: [x,y,z] (neutral plane point; its normal is pull) }
+ *      | { op: 'heal' }
+ * -> { brep, solids, volume, strategy, notes, steps } | { error, badEdges, badFaces, hint?, steps }
+ * Edge / face numbers are 0-based in TopExp::MapShapes order (as the meshes give them).
+ */
+val modify(val it, val spec) {
+  try {
+    const TopoDS_Shape body = shapeOf(it);
+    const std::string op = spec["op"].as<std::string>();
+    rk::Result r;
+    if (op == "fillet" || op == "chamfer") {
+      std::vector<rk::EdgeSize> list;
+      val es = spec["edges"];
+      for (int i = 0, n = es["length"].as<int>(); i < n; i++) {
+        val e = es[i];
+        const double r1 = e["r1"].as<double>();
+        list.push_back({e["edge"].as<int>(), r1, has(e, "r2") ? e["r2"].as<double>() : r1, has(e, "angle") ? e["angle"].as<double>() : 0.0});
+      }
+      r = rk::blend(op == "fillet" ? rk::Blend::Fillet : rk::Blend::Chamfer, body, list);
+    } else if (op == "shell") {
+      r = rk::shell(body, intsOf(spec["faces"]), spec["thickness"].as<double>(), has(spec, "outward") && spec["outward"].as<bool>());
+    } else if (op == "offset") {
+      r = rk::offset(body, spec["distance"].as<double>());
+    } else if (op == "thicken") {
+      std::vector<int> fs = intsOf(spec["faces"]);
+      TopoDS_Shape sheet = body;
+      if (!fs.empty()) {
+        rk::Index ix(body);
+        BRepBuilderAPI_Sewing sew(1e-6);
+        for (int f : fs) {
+          if (f < 0 || f >= ix.faces.Extent()) throw std::runtime_error("That face no longer matches its body");
+          sew.Add(ix.faces.FindKey(f + 1));
+        }
+        sew.Perform();
+        sheet = sew.SewedShape();
+      }
+      r = rk::thicken(sheet, spec["distance"].as<double>());
+    } else if (op == "draft") {
+      const gp_Dir pull(vec(spec["pull"]));
+      r = rk::draft(body, intsOf(spec["faces"]), spec["angle"].as<double>(), pull, gp_Pln(pnt(spec["origin"]), pull));
+    } else if (op == "heal") {
+      r.shape = rk::healBody(body, r.notes);
+      r.strategy = r.notes.empty() ? "nothing to fix" : "healed";
+      if (r.notes.empty()) r.notes.push_back("the body was already sound");
+    } else {
+      throw std::runtime_error("Unknown operation " + op);
+    }
+    return resultVal(r);
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
+
+/** Run the kernel stress tests (kernel/stress.hxx); `filter` = id prefix or group, "" for all. JSON text. */
+std::string stressTest(std::string filter) { return stress::json(stress::runAll(filter)); }
+
 /** Forget cached bodies (when the document is cleared). */
 void forgetShapes() { g_shapes.clear(); }
 
@@ -1676,5 +1778,7 @@ EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("bounds", &bounds);
   emscripten::function("editFaces", &editFaces);
   emscripten::function("solid", &solid);
+  emscripten::function("modify", &modify);
+  emscripten::function("stressTest", &stressTest);
   emscripten::function("forgetShapes", &forgetShapes);
 }

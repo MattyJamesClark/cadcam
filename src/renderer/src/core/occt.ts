@@ -157,7 +157,7 @@ export interface MeasureItem {
   matrix: number[]
 }
 
-async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces' | 'solid', items: { brep: Uint8Array; [k: string]: unknown }[], spec?: unknown): Promise<T> {
+async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces' | 'solid' | 'modify', items: { brep: Uint8Array; [k: string]: unknown }[], spec?: unknown): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const w = getWorker()
     if (sentFor !== w) {
@@ -246,6 +246,34 @@ export interface SolidResult {
  */
 export function solidCad(bodies: { brep: Uint8Array; matrix?: number[] }[], spec: SolidSpec): Promise<SolidResult> {
   return kernelCall<SolidResult>('solid', bodies, spec)
+}
+
+/** One edge of a fillet / chamfer: its index in the body and size (r2 = end size for a variable fillet, or the second chamfer distance). */
+export interface ModifyEdge {
+  edge: number
+  r1: number
+  r2?: number
+  /** Chamfer by distance and angle (degrees). */
+  angle?: number
+}
+export type ModifySpec =
+  | { op: 'fillet' | 'chamfer'; edges: ModifyEdge[] }
+  | { op: 'shell'; faces: number[]; thickness: number; outward?: boolean }
+  | { op: 'offset'; distance: number }
+  | { op: 'thicken'; faces?: number[]; distance: number }
+  | { op: 'draft'; faces: number[]; angle: number; pull: Vec3; origin: Vec3 }
+  | { op: 'heal' }
+export type ModifyResult =
+  | { brep: Uint8Array; solids: number; volume: number; strategy: string; notes: string[]; steps: string[]; error?: undefined }
+  | { error: string; badEdges: number[]; badFaces: number[]; hint?: number; steps: string[]; brep?: undefined }
+
+/**
+ * Fillet, chamfer, shell, offset, thicken, draft or heal a body through the
+ * kernel's robust layer. Never throws for a modelling failure: the result
+ * then says why in plain words and which edges / faces are at fault.
+ */
+export function modifyCad(brep: Uint8Array, spec: ModifySpec): Promise<ModifyResult> {
+  return kernelCall<ModifyResult>('modify', [{ brep }], spec)
 }
 
 /** Exact bounding box of bodies; matrices take each body into the frame to measure in. */
