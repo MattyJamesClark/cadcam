@@ -6,13 +6,6 @@ import type { CadModule } from '@/core/types'
  */
 export const plannedModules: CadModule[] = [
   {
-    id: 'sketch',
-    title: 'Sketch',
-    order: 10,
-    groups: [],
-    planned: '2D constrained sketching on planes and faces: lines, arcs, circles, dimensions and constraints.'
-  },
-  {
     id: 'part',
     title: 'Part Design',
     order: 20,
