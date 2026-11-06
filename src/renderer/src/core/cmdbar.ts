@@ -22,6 +22,15 @@ const ICON = {
 const TITLE = { ok: 'OK (Enter)', cancel: 'Cancel (Esc)', back: 'Back a step', next: 'Next step' }
 
 const stack: { bar: HTMLElement; host: HTMLElement }[] = []
+const watchers = new Set<(running: boolean) => void>()
+
+/** Is a command running (its tick bar showing)? */
+export const commandRunning = (): boolean => stack.length > 0
+/** Called whenever a command starts or ends. */
+export function onCommandChange(fn: (running: boolean) => void): void {
+  watchers.add(fn)
+}
+const notify = (): void => watchers.forEach((f) => f(stack.length > 0))
 
 export function showCmdBar(host: HTMLElement, actions: CmdBarActions): { update(a: CmdBarActions): void; dispose(): void } {
   const bar = el('div', 'vp-cmdbar')
@@ -44,6 +53,7 @@ export function showCmdBar(host: HTMLElement, actions: CmdBarActions): { update(
   stack.at(-1)?.bar.classList.add('hidden')
   stack.push({ bar, host })
   host.append(bar)
+  notify()
   return {
     update(a) {
       current = { ...current, ...a }
@@ -55,6 +65,7 @@ export function showCmdBar(host: HTMLElement, actions: CmdBarActions): { update(
       stack.splice(i, 1)
       bar.remove()
       stack.at(-1)?.bar.classList.remove('hidden')
+      notify()
     }
   }
 }

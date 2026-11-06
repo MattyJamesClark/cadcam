@@ -374,3 +374,10 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vp-strip .tool-pick-row .btn { height: 26px; padding: 0 8px; font-size: 12px; }
 .vp-strip .tool-count { width: 46px; height: 22px; font-size: 12px; }
 .vs-copy { display: flex; align-items: center; gap: 3px; font-size: 12px; margin-left: 2px; }
+.vp-filterbar[hidden] { display: none; }
+.status-icons { display: flex; gap: 2px; margin-left: auto; }
+.status-icons + .status-units { margin-left: 0; }
+.sb-icon { width: 20px; height: 18px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.sb-icon svg { width: 13px; height: 13px; }
+.sb-icon:hover { background: var(--panel-3); color: var(--text); }
+.sb-icon.narrowed { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }

@@ -3,6 +3,7 @@ import { icons } from './icons'
 import { EVERYTHING, FILTER_KEYS, selectFilter, type SelectFilter } from './picking'
 import { selection } from './selection'
 import { el } from './toolpanel'
+import { commandRunning, onCommandChange } from './cmdbar'
 
 /**
  * Small icon-only toolbar along the bottom of the viewport (Multi-select,
@@ -61,6 +62,40 @@ export function startBottomBar(ctx: ModuleContext): void {
   selectFilter.on('changed', showFilter)
   showFilter()
   vp.host.append(palette)
+  // Hidden unless a command is running, or the user pins it open from the bottom bar.
+  const PIN_KEY = 'cadcam.filterPinned'
+  let pinned = false
+  try {
+    pinned = localStorage.getItem(PIN_KEY) === '1'
+  } catch {
+    /* no storage */
+  }
+  const filterBtn = el('button', 'sb-icon')
+  filterBtn.innerHTML = icons.filter
+  const showPalette = (): void => {
+    palette.hidden = !(pinned || commandRunning())
+    filterBtn.classList.toggle('narrowed', pinned)
+    filterBtn.title = pinned ? 'Selection filter: always shown (click to show only during commands)' : 'Selection filter: shown during commands (click to keep it on screen)'
+  }
+  filterBtn.addEventListener('click', () => {
+    pinned = !pinned
+    try {
+      localStorage.setItem(PIN_KEY, pinned ? '1' : '0')
+    } catch {
+      /* no storage */
+    }
+    showPalette()
+  })
+  onCommandChange(showPalette)
+  // Tiny toggle in the window's status bar (bottom edge).
+  const sb = document.querySelector('.statusbar')
+  let tray = sb?.querySelector('.status-icons') as HTMLElement | null
+  if (sb && !tray) {
+    tray = el('span', 'status-icons')
+    sb.insertBefore(tray, sb.querySelector('.status-units'))
+  }
+  tray?.append(filterBtn)
+  showPalette()
 
   const multi = el('button', 'vb-btn')
   multi.innerHTML = icons.selMulti
