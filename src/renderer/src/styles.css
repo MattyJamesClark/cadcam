@@ -440,3 +440,11 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .gp-unit { color: var(--muted); font-size: 11px; }
 .gp-apply { flex: none; box-sizing: border-box; height: 28px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); font: inherit; cursor: pointer; }
 .gp-apply:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* Part Design command strips (Extrude / Revolve / Sweep / Combine) */
+.vp-strip.part-strip { width: max-content; max-width: calc(100% - 20px); }
+.vs-seg { display: inline-flex; }
+.vs-seg .seg-btn { height: 24px; padding: 0 10px; font-size: 12px; }
+.vs-check { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
+.vs-check.hidden { display: none; }
+.part-target { color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }

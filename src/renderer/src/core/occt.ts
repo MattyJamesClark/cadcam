@@ -157,7 +157,7 @@ export interface MeasureItem {
   matrix: number[]
 }
 
-async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces', items: { brep: Uint8Array; [k: string]: unknown }[]): Promise<T> {
+async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces' | 'solid', items: { brep: Uint8Array; [k: string]: unknown }[], spec?: unknown): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const w = getWorker()
     if (sentFor !== w) {
@@ -175,7 +175,7 @@ async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces', items: { br
     try {
       return await new Promise<T>((resolve, reject) => {
         pending.set(id, { resolve, reject })
-        w.postMessage({ id, op, items: payload })
+        w.postMessage({ id, op, items: payload, spec })
       })
     } catch (e) {
       // The kernel lost its copy (restarted): send everything again.
@@ -201,6 +201,51 @@ export function measureCad(items: MeasureItem[]): Promise<MeasureResult> {
 export async function editFacesCad(brep: Uint8Array, faces: number[], distance: number): Promise<Uint8Array> {
   const res = await kernelCall<{ brep: Uint8Array }>('editFaces', [{ brep, faces, distance }])
   return res.brep
+}
+
+/** A profile edge for the kernel: a line a→b, or an arc a→b through m (world points). */
+export interface SolidSeg {
+  a: Vec3
+  b: Vec3
+  m?: Vec3
+}
+export interface SolidProfile {
+  outer: SolidSeg[]
+  holes: SolidSeg[][]
+}
+export interface SolidMake {
+  kind: 'extrude' | 'revolve' | 'sweep'
+  profiles: SolidProfile[]
+  origin: Vec3
+  normal: Vec3
+  from?: number
+  to?: number
+  draft?: number
+  axisOrigin?: Vec3
+  axis?: Vec3
+  angle?: number
+  path?: SolidSeg[]
+}
+export interface SolidSpec {
+  make?: SolidMake
+  op: 'new' | 'fuse' | 'cut' | 'common'
+  /** Index into the bodies passed. */
+  target?: number
+  tools?: number[]
+}
+export interface SolidResult {
+  brep: Uint8Array
+  solids: number
+  volume: number
+}
+
+/**
+ * Extrude / revolve / sweep sketch profiles and / or add, cut or intersect
+ * bodies. Each body's matrix takes it into the frame the work is done in
+ * (the target body's own frame, or the world for a new body).
+ */
+export function solidCad(bodies: { brep: Uint8Array; matrix?: number[] }[], spec: SolidSpec): Promise<SolidResult> {
+  return kernelCall<SolidResult>('solid', bodies, spec)
 }
 
 /** Exact bounding box of bodies; matrices take each body into the frame to measure in. */
