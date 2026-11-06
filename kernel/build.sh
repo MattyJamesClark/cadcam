@@ -14,7 +14,7 @@ incs=$(for d in occt/src/*/; do printf -- '-I%s ' "$d"; done)
 libs=$(find occt-build -name 'libTK*.a' | sort | tr '\n' ' ')
 # Toolkits the cached OpenCascade build may not include (primitives, booleans,
 # offsets): compile their packages directly when the library is missing.
-for tk in TKPrim TKBO TKBool TKOffset; do
+for tk in TKPrim TKBO TKBool TKFillet TKOffset; do
   if ! echo "$libs" | grep -q "lib$tk.a"; then
     mkdir -p "tk/$tk"
     for pkg in $(cat occt/src/$tk/PACKAGES); do
