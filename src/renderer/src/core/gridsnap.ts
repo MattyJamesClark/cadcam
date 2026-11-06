@@ -57,11 +57,15 @@ export function setGridStep(step: number | null): void {
 
 function sync(): void {
   if (!btn || !vpRef) return
-  const label = state.step ? fmt(state.step) : `Auto ${fmt(vpRef.gridSpacing)}`
-  btn.querySelector('.sb-grid-text')!.textContent = label
-  btn.classList.toggle('narrowed', state.snap)
-  btn.title = `Grid ${state.step ? fmt(state.step) + ' mm' : 'spacing follows the zoom'}; snap ${state.snap ? 'on' : 'off'}. Click to change.`
+  const size = state.step ?? vpRef.gridSpacing
+  btn.querySelector('.sb-grid-text')!.textContent = `${fmt(size)} mm`
+  btn.classList.toggle('on', state.snap)
+  btn.classList.toggle('auto', !state.step)
+  btn.title = `Grid ${fmt(size)} mm${state.step ? '' : ' (automatic)'} · snap ${state.snap ? 'on' : 'off'}`
+  panel?.refresh()
 }
+
+let panel: { el: HTMLElement; refresh(): void } | null = null
 
 export function startGridControl(vp: Viewport): void {
   vpRef = vp
@@ -73,11 +77,12 @@ export function startGridControl(vp: Viewport): void {
     tray = el('span', 'status-icons')
     sb.insertBefore(tray, sb.querySelector('.status-units'))
   }
-  btn = el('button', 'sb-icon sb-grid')
-  btn.innerHTML = `${ICON}<span class="sb-grid-text"></span>`
+  btn = el('button', 'sb-grid')
+  btn.innerHTML = `${ICON}<span class="sb-grid-text"></span><span class="sb-grid-dot"></span>`
   btn.addEventListener('click', (e) => {
     e.stopPropagation()
-    openMenu(btn!)
+    if (panel) closePanel()
+    else openPanel(btn!)
   })
   tray.prepend(btn)
   // Auto spacing changes with the zoom: keep the label current.
@@ -91,55 +96,102 @@ export function startGridControl(vp: Viewport): void {
   sync()
 }
 
-function openMenu(anchor: HTMLElement): void {
-  document.querySelector('.grid-menu')?.remove()
-  const m = el('div', 'menu grid-menu')
-  const snap = el('label', 'grid-row')
-  const box = el('input')
-  box.type = 'checkbox'
-  box.checked = state.snap
-  box.addEventListener('change', () => setGridSnap(box.checked))
-  snap.append(box, el('span', '', 'Snap to grid (sketching)'))
-  m.append(snap, el('div', 'grid-head', 'Spacing (mm)'))
-  const list = el('div', 'grid-presets')
-  const opt = (label: string, step: number | null): void => {
-    const b = el('button', 'btn vs-text', label)
-    b.classList.toggle('on', state.step === step)
-    b.addEventListener('click', () => {
-      setGridStep(step)
-      close()
-    })
-    list.append(b)
+function closePanel(): void {
+  panel?.el.remove()
+  panel = null
+  window.removeEventListener('pointerdown', outside, true)
+  window.removeEventListener('keydown', onEsc, true)
+}
+const outside = (e: Event): void => {
+  const t = e.target as Node
+  if (panel && !panel.el.contains(t) && !btn?.contains(t)) closePanel()
+}
+const onEsc = (e: KeyboardEvent): void => {
+  if (e.key === 'Escape' && panel) {
+    e.stopPropagation()
+    closePanel()
   }
-  opt('Auto', null)
-  for (const p of PRESETS) opt(fmt(p), p)
-  m.append(list)
-  const custom = el('label', 'grid-row')
+}
+
+/** A labelled on / off switch row. */
+function switchRow(title: string, sub: string, get: () => boolean, set: (v: boolean) => void): { row: HTMLElement; refresh(): void } {
+  const row = el('button', 'gp-row')
+  const text = el('span', 'gp-row-text')
+  const t = el('span', 'gp-row-title', title)
+  const d = el('span', 'gp-row-sub', sub)
+  text.append(t, d)
+  const sw = el('span', 'gp-switch')
+  row.append(text, sw)
+  row.addEventListener('click', () => set(!get()))
+  return { row, refresh: () => row.classList.toggle('on', get()) }
+}
+
+function openPanel(anchor: HTMLElement): void {
+  const p = el('div', 'grid-panel')
+  p.addEventListener('pointerdown', (e) => e.stopPropagation())
+  const head = el('div', 'gp-head')
+  head.append(el('span', 'gp-title', 'Grid'))
+  const x = el('button', 'gp-close', '×')
+  x.title = 'Close'
+  x.addEventListener('click', closePanel)
+  head.append(x)
+
+  const snap = switchRow('Snap to grid', 'Sketch clicks land on grid points (hold Shift to place freely)', () => state.snap, (v) => setGridSnap(v))
+  const auto = switchRow('Automatic spacing', '', () => !state.step, (v) => setGridStep(v ? null : vpRef?.gridSpacing ?? 10))
+  const autoSub = auto.row.querySelector('.gp-row-sub') as HTMLElement
+
+  const sec = el('div', 'gp-section')
+  sec.append(el('div', 'gp-label', 'Spacing'))
+  const chips = el('div', 'gp-chips')
+  const chipEls = new Map<number, HTMLButtonElement>()
+  for (const v of PRESETS) {
+    const c = el('button', 'gp-chip', fmt(v))
+    c.addEventListener('click', () => setGridStep(v))
+    chips.append(c)
+    chipEls.set(v, c)
+  }
+  sec.append(chips)
+
+  const custom = el('div', 'gp-custom')
+  const field = el('label', 'gp-field')
   const input = el('input')
   input.type = 'text'
   input.inputMode = 'decimal'
-  input.placeholder = 'other'
-  if (state.step && !PRESETS.includes(state.step)) input.value = fmt(state.step)
+  input.placeholder = 'Custom'
+  field.append(input, el('span', 'gp-unit', 'mm'))
+  const apply = el('button', 'gp-apply', 'Set')
+  const use = (): void => {
+    const v = Number(input.value.replace(',', '.'))
+    if (Number.isFinite(v) && v > 0) {
+      setGridStep(v)
+      input.blur()
+    } else input.classList.add('bad')
+  }
+  apply.addEventListener('click', use)
+  input.addEventListener('input', () => input.classList.remove('bad'))
   input.addEventListener('keydown', (e) => {
     e.stopPropagation()
-    if (e.key === 'Enter') {
-      const v = Number(input.value.replace(',', '.'))
-      if (Number.isFinite(v) && v > 0) setGridStep(v)
-      close()
-    } else if (e.key === 'Escape') close()
+    if (e.key === 'Enter') use()
+    else if (e.key === 'Escape') closePanel()
   })
-  custom.append(el('span', '', 'Other:'), input)
-  m.append(custom)
+  custom.append(field, apply)
+  sec.append(custom)
+
+  p.append(head, snap.row, auto.row, sec)
+  const refresh = (): void => {
+    snap.refresh()
+    auto.refresh()
+    autoSub.textContent = state.step ? `Fixed at ${fmt(state.step)} mm whatever the zoom` : `Follows the zoom (now ${fmt(vpRef?.gridSpacing ?? 10)} mm)`
+    for (const [v, c] of chipEls) c.classList.toggle('on', state.step === v)
+    if (document.activeElement !== input) input.value = state.step && !PRESETS.includes(state.step) ? fmt(state.step) : ''
+  }
+  panel = { el: p, refresh }
+  refresh()
+  document.body.append(p)
   const r = anchor.getBoundingClientRect()
-  m.style.right = `${Math.max(4, window.innerWidth - r.right)}px`
-  m.style.bottom = `${window.innerHeight - r.top + 4}px`
-  document.body.append(m)
-  const close = (): void => {
-    m.remove()
-    window.removeEventListener('pointerdown', outside, true)
-  }
-  const outside = (e: Event): void => {
-    if (!m.contains(e.target as Node) && e.target !== anchor) close()
-  }
+  const w = p.offsetWidth
+  p.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w))}px`
+  p.style.bottom = `${window.innerHeight - r.top + 6}px`
   window.addEventListener('pointerdown', outside, true)
+  window.addEventListener('keydown', onEsc, true)
 }
