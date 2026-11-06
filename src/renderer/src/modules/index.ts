@@ -4,6 +4,7 @@ import { plannedModules } from './planned'
 import { viewModule } from './view'
 import { queryModule } from './query'
 import { sketchModule } from './sketch'
+import { partModule } from './part'
 
 /** Every tab in the app. Add new modules here. */
-export const modules: CadModule[] = [homeModule, queryModule, viewModule, sketchModule, ...plannedModules]
+export const modules: CadModule[] = [homeModule, queryModule, viewModule, sketchModule, partModule, ...plannedModules]

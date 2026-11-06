@@ -6,13 +6,6 @@ import type { CadModule } from '@/core/types'
  */
 export const plannedModules: CadModule[] = [
   {
-    id: 'part',
-    title: 'Part Design',
-    order: 20,
-    groups: [],
-    planned: 'Solid modelling from sketches: extrude, revolve, fillet, chamfer, holes, booleans. STEP/IGES import and export arrive with this module.'
-  },
-  {
     id: 'cam',
     title: 'CAM',
     order: 30,

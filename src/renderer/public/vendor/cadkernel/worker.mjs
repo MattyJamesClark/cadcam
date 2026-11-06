@@ -3,6 +3,7 @@
  * colours, layers, assemblies and STEP product data.
  * Message in:  { id, format, buffer, quality }           (read)
  *              { id, op: 'write', format, spec }        (write; result is { bytes, skipped, faceted })
+ *              { id, op: 'solid', items, spec }          (extrude / revolve / sweep / booleans; result is { brep, solids, volume })
  * Message out: { id, stage, done, total } (progress) | { id, result } | { id, error } */
 import createCadKernel from './cadkernel.js'
 import { readStepInfo } from './step-info.mjs'
@@ -49,10 +50,14 @@ onmessage = async (ev) => {
   const { id, format, buffer, quality } = ev.data
   try {
     if (ev.data.op === 'write') return await write(id, format, ev.data.spec)
-    if (ev.data.op === 'measure' || ev.data.op === 'bounds' || ev.data.op === 'editFaces') {
+    if (ev.data.op === 'measure' || ev.data.op === 'bounds' || ev.data.op === 'editFaces' || ev.data.op === 'solid') {
       const k = await kernel()
       const op = ev.data.op
-      const res = op === 'measure' ? k.measure(ev.data.items) : op === 'bounds' ? k.bounds(ev.data.items) : k.editFaces(ev.data.items[0])
+      const res =
+        op === 'measure' ? k.measure(ev.data.items)
+        : op === 'bounds' ? k.bounds(ev.data.items)
+        : op === 'solid' ? k.solid(ev.data.items, ev.data.spec)
+        : k.editFaces(ev.data.items[0])
       if (res.error) throw new Error(res.error)
       return postMessage({ id, result: res })
     }

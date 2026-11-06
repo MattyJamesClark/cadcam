@@ -58,6 +58,21 @@ names, colours (per part, body and face) and layers. Wireframe curves come in as
 Files that have been opened before load from a cache in a fraction of a second; the cache keeps
 the 24 most recent files and is invalidated when the file changes.
 
+## Part Design
+
+Solids from sketches and booleans, modelled directly (each command makes or changes a plain body
+in one undo step; there is no feature history, and sketches stay parametric). Details in
+[docs/part-design.md](docs/part-design.md).
+
+* **Extrude / Extrude cut**: closed sketch profiles straight out by a distance, both sides,
+  through all, with a draft angle.
+* **Revolve / Revolve cut**: profiles round a sketch line (a lone centreline is used for you).
+* **Sweep / Sweep cut**: a profile along a path drawn in another sketch.
+* **Add / Cut / Intersect**: booleans between bodies.
+
+Every value is typed in the strip or dragged on screen (arrow for distances, ring for angles);
+a mesh preview follows the drag and the exact kernel solid replaces it when the drag stops.
+
 ## Architecture
 
 ```

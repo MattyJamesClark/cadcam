@@ -42,6 +42,18 @@
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Common.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
+#include <BRepOffsetAPI_MakePipeShell.hxx>
+#include <BRepOffsetAPI_DraftAngle.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <GC_MakeArcOfCircle.hxx>
+#include <Geom_TrimmedCurve.hxx>
+#include <ShapeFix_Face.hxx>
+#include <ShapeFix_Shape.hxx>
+#include <gp_Ax1.hxx>
 #include <BRepOffset_MakeOffset.hxx>
 #include <BRepLib.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
@@ -1357,6 +1369,303 @@ val editFaces(val it) {
   }
 }
 
+// ---- solid modelling ------------------------------------------------------------
+
+namespace {
+gp_Pnt pnt(const val& a) { return gp_Pnt(a[0].as<double>(), a[1].as<double>(), a[2].as<double>()); }
+gp_Vec vec(const val& a) { return gp_Vec(a[0].as<double>(), a[1].as<double>(), a[2].as<double>()); }
+bool has(const val& v, const char* k) { return !v[k].isUndefined() && !v[k].isNull(); }
+
+/** Segments [{ a, b, m? }] (m: a point on an arc between a and b) -> wire. */
+TopoDS_Wire wireOf(const val& segs) {
+  BRepBuilderAPI_MakeWire mw;
+  for (int i = 0, n = segs["length"].as<int>(); i < n; i++) {
+    val s = segs[i];
+    const gp_Pnt a = pnt(s["a"]), b = pnt(s["b"]);
+    TopoDS_Edge e;
+    if (has(s, "m")) {
+      GC_MakeArcOfCircle arc(a, pnt(s["m"]), b);
+      if (!arc.IsDone()) throw std::runtime_error("A profile arc is degenerate");
+      e = BRepBuilderAPI_MakeEdge(arc.Value()).Edge();
+    } else {
+      if (a.Distance(b) < 1e-7) continue;
+      e = BRepBuilderAPI_MakeEdge(a, b).Edge();
+    }
+    mw.Add(e);
+    if (!mw.IsDone()) throw std::runtime_error("The profile isn't a connected loop");
+  }
+  if (!mw.IsDone()) throw std::runtime_error("The profile is empty");
+  return mw.Wire();
+}
+
+/** Profiles [{ outer: segs, holes: [segs] }] on a plane -> faces. */
+std::vector<TopoDS_Face> facesOf(const val& profiles, const gp_Pln& pln) {
+  std::vector<TopoDS_Face> out;
+  for (int i = 0, n = profiles["length"].as<int>(); i < n; i++) {
+    val pr = profiles[i];
+    BRepBuilderAPI_MakeFace mf(pln, wireOf(pr["outer"]), Standard_True);
+    if (has(pr, "holes")) {
+      val hs = pr["holes"];
+      for (int k = 0, m = hs["length"].as<int>(); k < m; k++) mf.Add(wireOf(hs[k]));
+    }
+    if (!mf.IsDone()) throw std::runtime_error("A profile couldn't be made into a face");
+    ShapeFix_Face fix(mf.Face());
+    fix.FixOrientation();
+    fix.Perform();
+    out.push_back(fix.Face());
+  }
+  if (out.empty()) throw std::runtime_error("No profile picked");
+  return out;
+}
+
+TopoDS_Shape fuseAll(const std::vector<TopoDS_Shape>& list) {
+  if (list.size() == 1) return list[0];
+  TopTools_ListOfShape args, tools;
+  args.Append(list[0]);
+  for (size_t i = 1; i < list.size(); i++) tools.Append(list[i]);
+  BRepAlgoAPI_Fuse op;
+  op.SetArguments(args);
+  op.SetTools(tools);
+  op.Build();
+  if (!op.IsDone()) throw std::runtime_error("The pieces couldn't be joined");
+  return op.Shape();
+}
+
+/** Prism of a face from the plane out to `d` along n, with an optional draft (degrees, + narrows). */
+TopoDS_Shape prism(const TopoDS_Face& f, const gp_Dir& n, const gp_Pnt& origin, double d, double draft) {
+  TopoDS_Shape s = BRepPrimAPI_MakePrism(f, gp_Vec(n) * d).Shape();
+  if (std::fabs(draft) < 1e-9) return s;
+  gp_Dir pull = d > 0 ? n : n.Reversed();
+  BRepOffsetAPI_DraftAngle da(s);
+  for (TopExp_Explorer ex(s, TopAbs_FACE); ex.More(); ex.Next()) {
+    const TopoDS_Face& face = TopoDS::Face(ex.Current());
+    BRepAdaptor_Surface su(face);
+    // Caps are parallel to the sketch: leave them.
+    if (su.GetType() == GeomAbs_Plane && su.Plane().Axis().Direction().IsParallel(n, 1e-6)) continue;
+    da.Add(face, pull, draft * kPi / 180, gp_Pln(origin, n));
+    if (!da.AddDone()) throw std::runtime_error("That draft angle can't be applied to this profile");
+  }
+  da.Build();
+  if (!da.IsDone()) throw std::runtime_error("That draft angle can't be applied to this profile");
+  return da.Shape();
+}
+
+TopoDS_Shape boolean(const std::string& op, const TopoDS_Shape& a, const std::vector<TopoDS_Shape>& tools) {
+  TopTools_ListOfShape args, tl;
+  args.Append(a);
+  for (auto& t : tools) tl.Append(t);
+  TopoDS_Shape r;
+  if (op == "fuse") {
+    BRepAlgoAPI_Fuse b;
+    b.SetArguments(args);
+    b.SetTools(tl);
+    b.Build();
+    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The bodies couldn't be added together");
+    r = b.Shape();
+  } else if (op == "cut") {
+    BRepAlgoAPI_Cut b;
+    b.SetArguments(args);
+    b.SetTools(tl);
+    b.Build();
+    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The cut couldn't be made");
+    r = b.Shape();
+  } else if (op == "common") {
+    BRepAlgoAPI_Common b;
+    b.SetArguments(args);
+    b.SetTools(tl);
+    b.Build();
+    if (!b.IsDone() || b.HasErrors()) throw std::runtime_error("The intersection couldn't be made");
+    r = b.Shape();
+  } else {
+    throw std::runtime_error("Unknown boolean " + op);
+  }
+  ShapeUpgrade_UnifySameDomain unify(r, true, true, true);
+  unify.Build();
+  return unify.Shape();
+}
+
+int countSolids(const TopoDS_Shape& s) {
+  int n = 0;
+  for (TopExp_Explorer ex(s, TopAbs_SOLID); ex.More(); ex.Next()) n++;
+  return n;
+}
+
+double volumeOf(const TopoDS_Shape& s) {
+  GProp_GProps g;
+  BRepGProp::VolumeProperties(s, g);
+  return std::fabs(g.Mass());
+}
+}  // namespace
+
+/**
+ * Solid modelling in one call: make a solid from sketch profiles (extrude,
+ * revolve, sweep) and/or combine it with bodies (add, cut, intersect).
+ *
+ * items = [{ key, brep?, matrix? }]   bodies; matrix takes each into the frame the work is done in
+ * spec  = {
+ *   make?: { kind: 'extrude'|'revolve'|'sweep',
+ *            profiles: [{ outer: Seg[], holes: Seg[][] }],  Seg = { a: [x,y,z], b, m? }  (m: point on an arc)
+ *            origin: [x,y,z], normal: [x,y,z]                profile plane
+ *            from?, to?, draft?                                extrude: distances along the normal, draft in degrees
+ *            axisOrigin?, axis?, angle?                        revolve (degrees)
+ *            path?: Seg[] }                                    sweep
+ *   op: 'new'|'fuse'|'cut'|'common', target?: item index, tools?: [item index...]
+ * }
+ * -> { brep: Uint8Array (text BREP), solids, volume } | { error }
+ */
+val solid(val items, val spec) {
+  try {
+    std::vector<TopoDS_Shape> bodies;
+    for (int i = 0, n = items["length"].as<int>(); i < n; i++) {
+      val it = items[i];
+      const int key = it["key"].as<int>();
+      if (has(it, "brep")) {
+        std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(it["brep"]);
+        std::istringstream is(std::string(bytes.begin(), bytes.end()));
+        TopoDS_Shape sh;
+        BinTools::Read(sh, is);
+        g_shapes[key] = sh;
+      }
+      auto found = g_shapes.find(key);
+      if (found == g_shapes.end()) throw std::runtime_error("missing-shape");
+      TopoDS_Shape sh = found->second;
+      if (has(it, "matrix")) {
+        val mm = it["matrix"];
+        double v[12];
+        for (int k = 0; k < 12; k++) v[k] = mm[k].as<double>();
+        gp_Trsf t;
+        t.SetValues(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]);
+        if (std::fabs(t.ScaleFactor() - 1) > 1e-9 || t.IsNegative()) sh = BRepBuilderAPI_Transform(sh, t, true).Shape();
+        else if (t.Form() != gp_Identity) sh = sh.Moved(TopLoc_Location(t));
+      }
+      bodies.push_back(sh);
+    }
+    auto body = [&](const val& i) -> TopoDS_Shape {
+      const int k = i.as<int>();
+      if (k < 0 || k >= (int)bodies.size()) throw std::runtime_error("Missing body");
+      return bodies[k];
+    };
+
+    const std::string op = spec["op"].as<std::string>();
+    TopoDS_Shape made;
+    if (has(spec, "make")) {
+      val mk = spec["make"];
+      const std::string kind = mk["kind"].as<std::string>();
+      const gp_Pnt origin = pnt(mk["origin"]);
+      const gp_Dir n(vec(mk["normal"]));
+      const gp_Pln pln(origin, n);
+      std::vector<TopoDS_Face> faces = facesOf(mk["profiles"], pln);
+      std::vector<TopoDS_Shape> parts;
+      if (kind == "extrude") {
+        const double from = has(mk, "from") ? mk["from"].as<double>() : 0.0;
+        const double to = mk["to"].as<double>();
+        const double draft = has(mk, "draft") ? mk["draft"].as<double>() : 0.0;
+        if (std::fabs(to - from) < 1e-7) throw std::runtime_error("Distance is zero");
+        for (auto& f : faces) {
+          // Each side runs from the sketch plane out, so a draft tapers away from the sketch.
+          if (from < -1e-9 && to > 1e-9) {
+            parts.push_back(prism(f, n, origin, to, draft));
+            parts.push_back(prism(f, n, origin, from, draft));
+          } else if (std::fabs(from) < 1e-9 || std::fabs(to) < 1e-9) {
+            parts.push_back(prism(f, n, origin, std::fabs(from) < 1e-9 ? to : from, draft));
+          } else {
+            // Starts off the plane (offset start): no draft.
+            TopoDS_Shape moved = BRepBuilderAPI_Transform(f, [&] { gp_Trsf t; t.SetTranslation(gp_Vec(n) * from); return t; }(), true).Shape();
+            parts.push_back(BRepPrimAPI_MakePrism(moved, gp_Vec(n) * (to - from)).Shape());
+          }
+        }
+      } else if (kind == "revolve") {
+        const gp_Ax1 ax(pnt(mk["axisOrigin"]), gp_Dir(vec(mk["axis"])));
+        const double ang = mk["angle"].as<double>();
+        if (std::fabs(ang) < 1e-6) throw std::runtime_error("Angle is zero");
+        for (auto& f : faces) {
+          // Must not cross the axis.
+          BRepExtrema_DistShapeShape dss(f, BRepBuilderAPI_MakeEdge(gp_Lin(ax)).Edge());
+          if (dss.IsDone() && dss.NbSolution() > 0 && dss.Value() < 1e-7) {
+            Bnd_Box bb;
+            BRepBndLib::Add(f, bb);
+            // Touching the axis along an edge is fine; crossing it isn't. Check both sides.
+            gp_Vec side = gp_Vec(ax.Direction()).Crossed(gp_Vec(n));
+            double lo = 1e300, hi = -1e300;
+            for (TopExp_Explorer ex(f, TopAbs_VERTEX); ex.More(); ex.Next()) {
+              const double s = gp_Vec(ax.Location(), BRep_Tool::Pnt(TopoDS::Vertex(ex.Current()))).Dot(side);
+              lo = std::min(lo, s);
+              hi = std::max(hi, s);
+            }
+            if (lo < -1e-6 && hi > 1e-6) throw std::runtime_error("The profile crosses the axis");
+          }
+          if (std::fabs(std::fabs(ang) - 360) < 1e-6) parts.push_back(BRepPrimAPI_MakeRevol(f, ax).Shape());
+          else parts.push_back(BRepPrimAPI_MakeRevol(f, ax, ang * kPi / 180).Shape());
+        }
+      } else if (kind == "sweep") {
+        const TopoDS_Wire path = wireOf(mk["path"]);
+        for (auto& f : faces) {
+          // Outer and hole wires swept on their own, then the holes cut away.
+          std::vector<TopoDS_Shape> holes;
+          TopoDS_Shape outerSolid;
+          const TopoDS_Wire outer = BRepTools::OuterWire(f);
+          for (TopExp_Explorer ex(f, TopAbs_WIRE); ex.More(); ex.Next()) {
+            TopoDS_Wire w = TopoDS::Wire(ex.Current());
+            BRepOffsetAPI_MakePipeShell ps(path);
+            ps.SetMode(Standard_False);  // corrected Frenet
+            ps.SetTransitionMode(BRepBuilderAPI_RightCorner);
+            ps.Add(w);
+            ps.Build();
+            if (!ps.IsDone()) throw std::runtime_error("The profile can't be swept along that path");
+            if (!ps.MakeSolid()) throw std::runtime_error("The sweep didn't close into a solid");
+            if (w.IsSame(outer)) outerSolid = ps.Shape();
+            else holes.push_back(ps.Shape());
+          }
+          parts.push_back(holes.empty() ? outerSolid : boolean("cut", outerSolid, holes));
+        }
+      } else {
+        throw std::runtime_error("Unknown solid " + kind);
+      }
+      made = fuseAll(parts);
+      if (parts.size() > 1) {
+        ShapeUpgrade_UnifySameDomain unify(made, true, true, true);
+        unify.Build();
+        made = unify.Shape();
+      }
+    }
+
+    TopoDS_Shape result;
+    if (op == "new") {
+      if (made.IsNull()) throw std::runtime_error("Nothing to make");
+      result = made;
+    } else {
+      const TopoDS_Shape target = body(spec["target"]);
+      std::vector<TopoDS_Shape> tools;
+      if (!made.IsNull()) tools.push_back(made);
+      if (has(spec, "tools")) {
+        val tl = spec["tools"];
+        for (int i = 0, n = tl["length"].as<int>(); i < n; i++) tools.push_back(body(tl[i]));
+      }
+      if (tools.empty()) throw std::runtime_error("Pick the bodies to combine");
+      result = boolean(op, target, tools);
+    }
+    if (result.IsNull() || countSolids(result) == 0)
+      throw std::runtime_error(op == "common" ? "The bodies don't overlap" : op == "cut" ? "The cut removes the whole body" : "The result is empty");
+
+    std::ostringstream os;
+    BRepTools::Write(result, os);
+    const std::string str = os.str();
+    val res = val::object();
+    res.set("brep", val(emscripten::typed_memory_view(str.size(), reinterpret_cast<const uint8_t*>(str.data()))).call<val>("slice"));
+    res.set("solids", countSolids(result));
+    res.set("volume", volumeOf(result));
+    return res;
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
+
 /** Forget cached bodies (when the document is cleared). */
 void forgetShapes() { g_shapes.clear(); }
 
@@ -1366,5 +1675,6 @@ EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("measure", &measure);
   emscripten::function("bounds", &bounds);
   emscripten::function("editFaces", &editFaces);
+  emscripten::function("solid", &solid);
   emscripten::function("forgetShapes", &forgetShapes);
 }
