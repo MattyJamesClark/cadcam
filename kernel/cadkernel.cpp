@@ -1442,7 +1442,7 @@ TopoDS_Shape prism(const TopoDS_Face& f, const gp_Dir& n, const gp_Pnt& origin, 
     BRepAdaptor_Surface su(face);
     // Caps are parallel to the sketch: leave them.
     if (su.GetType() == GeomAbs_Plane && su.Plane().Axis().Direction().IsParallel(n, 1e-6)) continue;
-    da.Add(face, pull, -draft * kPi / 180, gp_Pln(origin, n));
+    da.Add(face, pull, draft * kPi / 180, gp_Pln(origin, n));
     if (!da.AddDone()) throw std::runtime_error("That draft angle can't be applied to this profile");
   }
   da.Build();
