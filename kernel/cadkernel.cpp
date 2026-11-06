@@ -1310,46 +1310,56 @@ val editFaces(val it) {
       faces.push_back(TopoDS::Face(map.FindKey(k + 1)));
     }
     if (faces.empty()) throw std::runtime_error("No faces picked");
-    bool allFlat = true;
-    for (auto& f : faces) if (BRepAdaptor_Surface(f).GetType() != GeomAbs_Plane) allFlat = false;
-
-    TopoDS_Shape result;
-    if (allFlat) {
-      TopTools_ListOfShape tools;
-      for (auto& f : faces) {
+    // Each face becomes a slab between it and where it moves to: a prism for a
+    // flat face, a thickened copy of the face for a curved one. Pulling out
+    // fuses the slabs on; pushing in cuts them away. The rest of the body
+    // (every other solid included) is left exactly as it was.
+    TopTools_ListOfShape tools;
+    for (auto& f : faces) {
+      if (BRepAdaptor_Surface(f).GetType() == GeomAbs_Plane) {
         gp_Pln pl = BRepAdaptor_Surface(f).Plane();
         gp_Dir n = pl.Axis().Direction();
         if (f.Orientation() == TopAbs_REVERSED) n.Reverse();
         tools.Append(BRepPrimAPI_MakePrism(f, gp_Vec(n) * d).Shape());
-      }
-      TopTools_ListOfShape args;
-      args.Append(body);
-      if (d > 0) {
-        BRepAlgoAPI_Fuse op;
-        op.SetArguments(args);
-        op.SetTools(tools);
-        op.Build();
-        if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pulled out that far");
-        result = op.Shape();
       } else {
-        BRepAlgoAPI_Cut op;
-        op.SetArguments(args);
-        op.SetTools(tools);
-        op.Build();
-        if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pushed in that far");
-        result = op.Shape();
+        BRepOffset_MakeOffset mo;
+        mo.Initialize(f, d, 1e-4, BRepOffset_Skin, Standard_False, Standard_False, GeomAbs_Intersection, Standard_True);
+        mo.MakeOffsetShape();
+        if (!mo.IsDone() || mo.Shape().IsNull()) throw std::runtime_error("That curved face can't be moved that far");
+        tools.Append(mo.Shape());
       }
-      ShapeUpgrade_UnifySameDomain unify(result, true, true, true);
-      unify.Build();
-      result = unify.Shape();
-    } else {
-      BRepOffset_MakeOffset mo;
-      mo.Initialize(body, 0.0, 1e-4, BRepOffset_Skin, Standard_False, Standard_False, GeomAbs_Intersection, Standard_False);
-      for (auto& f : faces) mo.SetOffsetOnFace(f, d);
-      mo.MakeOffsetShape();
-      if (!mo.IsDone()) throw std::runtime_error("Those faces can't be offset that far");
-      result = mo.Shape();
     }
+    TopTools_ListOfShape args;
+    args.Append(body);
+    TopoDS_Shape result;
+    if (d > 0) {
+      BRepAlgoAPI_Fuse op;
+      op.SetArguments(args);
+      op.SetTools(tools);
+      op.Build();
+      if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pulled out that far");
+      result = op.Shape();
+    } else {
+      BRepAlgoAPI_Cut op;
+      op.SetArguments(args);
+      op.SetTools(tools);
+      op.Build();
+      if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pushed in that far");
+      result = op.Shape();
+    }
+    ShapeUpgrade_UnifySameDomain unify(result, true, true, true);
+    unify.Build();
+    result = unify.Shape();
+    // Never hand back less than we were given: a result missing a solid, or
+    // broken, is refused and the body stays as it was.
+    auto solids = [](const TopoDS_Shape& s) {
+      int n = 0;
+      for (TopExp_Explorer e(s, TopAbs_SOLID); e.More(); e.Next()) n++;
+      return n;
+    };
+    if (result.IsNull() || solids(result) == 0) throw std::runtime_error("The edit gave an empty body; nothing was changed");
+    if (solids(result) < solids(body)) throw std::runtime_error("The edit would have removed part of the body; nothing was changed");
+    if (!BRepCheck_Analyzer(result).IsValid()) throw std::runtime_error("The edit gave a broken solid; nothing was changed");
     if (result.IsNull()) throw std::runtime_error("The edit gave an empty body");
     // Text BREP, as readCad('brep') takes it.
     std::ostringstream os;
