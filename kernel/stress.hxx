@@ -239,6 +239,8 @@ struct Spec {
   std::function<std::string(const TopoDS_Shape&)> check;
   /** For impossible cases: must the error name an edge / face? */
   bool mustName = true;
+  /** Raw OpenCascade crashes the process on this one: don't run it. */
+  bool rawCrashes = false;
 };
 
 inline Row run(const Spec& s) {
@@ -253,8 +255,11 @@ inline Row run(const Spec& s) {
     TopoDS_Shape r;
     std::string why;
     try {
-      r = s.raw ? s.raw() : TopoDS_Shape();
-      if (r.IsNull()) why = "not done";
+      if (s.rawCrashes) why = "crashes the kernel (not run)";
+      else {
+        r = s.raw ? s.raw() : TopoDS_Shape();
+        if (r.IsNull()) why = "not done";
+      }
     } catch (const Standard_Failure& e) {
       why = "exception: " + rk::what(e);
     } catch (const std::exception& e) {
@@ -528,6 +533,20 @@ inline std::vector<Spec> cases() {
                  solidCheck(1, 7950, 7999)});
     TopoDS_Shape p = box(0, 0, 0, 20, 20, 4);
     auto top = edgesWhere(p, [](const gp_Pnt& q, const BRepAdaptor_Curve&) { return q.Z() > 3.9 && q.Y() < 1e-6; });
+    {
+      // Found in the app: chamfer an outside corner of a shelled box deeper than its wall.
+      TopoDS_Shape bb = box(0, 0, 0, 100, 60, 40);
+      auto two = edgesWhere(bb, [](const gp_Pnt& p, const BRepAdaptor_Curve&) { return std::fabs(p.Z() - 40) < 1e-6 && (p.Y() < 1e-6 || std::fabs(p.X() - 100) < 1e-6); });
+      TopoDS_Shape f2 = blend(Blend::Fillet, bb, sized(two, 8)).shape;
+      TopoDS_Shape cupf = shell(f2, facesWhere(f2, [](const TopoDS_Face& f) { return BRepAdaptor_Surface(f).GetType() == GeomAbs_Plane && faceNormal(f).Angle(gp::DZ()) < 1e-3; }), 3).shape;
+      auto corner = edgesWhere(cupf, [](const gp_Pnt& p, const BRepAdaptor_Curve& c) { return c.GetType() == GeomAbs_Line && c.Line().Direction().IsParallel(gp::DZ(), 1e-6) && std::fabs(p.X() - 100) < 1e-6 && std::fabs(p.Y() - 60) < 1e-6; });
+      const double vc = volume(cupf);
+      L.push_back({"C5", "Chamfer", "Shelled box: 5 mm chamfer down an outside corner that ends where two fillets meet (found in the app; OpenCascade crashes)", true, rawChamfer(cupf, corner, 5),
+                   [=] { return blend(Blend::Chamfer, cupf, sized(corner, 5)); }, solidCheck(1, vc - 500, vc), false, true});
+      const double ch = 0.5 * 4 * 40;
+      L.push_back({"C6", "Chamfer", "Shelled box (3 mm walls): 2 mm chamfer on an outside corner", true, rawChamfer(cupf, corner, 2),
+                   [=] { return blend(Blend::Chamfer, cupf, sized(corner, 2)); }, solidCheck(1, vc - ch - 20, vc - ch + 20)});
+    }
     L.push_back({"C4", "Chamfer", "Chamfer deeper than the plate (6 mm on a 4 mm plate)", false, rawChamfer(p, top, 6), [=] { return blend(Blend::Chamfer, p, sized(top, 6)); }, solidCheck(1, 0, 1600)});
   }
 
@@ -950,7 +969,18 @@ inline std::string json(const std::vector<Row>& rows) {
   return o.str();
 }
 
-/** Run every case whose id starts with `filter` (empty = all). */
+/** Every case id, in order (JSON array). */
+inline std::string ids() {
+  std::string o = "[";
+  bool first = true;
+  for (auto& c : cases()) {
+    o += (first ? "\"" : ",\"") + c.id + "\"";
+    first = false;
+  }
+  return o + "]";
+}
+
+/** Run the case with id `filter`, or every case in group `filter` (empty = all). */
 inline std::vector<Row> runAll(const std::string& filter = "", const std::function<void(const Row&)>& each = {}) {
   std::vector<Row> rows;
   std::vector<Spec> all;
@@ -967,7 +997,8 @@ inline std::vector<Row> runAll(const std::string& filter = "", const std::functi
     return rows;
   }
   for (auto& c : all) {
-    if (!filter.empty() && c.id.rfind(filter, 0) != 0 && c.group != filter) continue;
+    if (!filter.empty() && c.id != filter && c.group != filter) continue;
+    if (!filter.empty() && c.id != filter && c.group != filter) continue;
     rows.push_back(run(c));
     if (each) each(rows.back());
   }

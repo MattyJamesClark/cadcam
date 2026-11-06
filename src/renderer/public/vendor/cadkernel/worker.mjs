@@ -101,6 +101,13 @@ onmessage = async (ev) => {
     }
     postMessage({ id, result }, transfer)
   } catch (e) {
+    // A crash inside the kernel (a wasm trap) leaves it in a broken state:
+    // start a fresh one for the next call (bodies are sent again on demand).
+    if (e instanceof WebAssembly.RuntimeError) {
+      ready = null
+      kernel()
+      return postMessage({ id, error: 'The CAD kernel hit an internal fault on this operation and has been restarted. Try a different size or fewer edges / faces.' })
+    }
     postMessage({ id, error: String((e && e.message) || e) })
   }
 }

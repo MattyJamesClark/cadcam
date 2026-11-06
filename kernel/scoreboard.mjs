@@ -8,9 +8,20 @@ import { pathToFileURL } from 'node:url'
 const dir = resolve(process.argv[2] ?? 'src/renderer/public/vendor/cadkernel')
 const filter = process.argv[3] ?? ''
 const { default: create } = await import(pathToFileURL(resolve(dir, 'cadkernel.js')).href)
-const k = await create()
+// One case at a time: a case that crashes the kernel (a wasm trap) is recorded
+// as a failure and the kernel is started afresh for the next.
+let k = await create()
 const t0 = performance.now()
-const rows = JSON.parse(k.stressTest(filter))
+const rows = []
+for (const id of JSON.parse(k.stressIds())) {
+  if (filter && id !== filter) continue
+  try {
+    rows.push(...JSON.parse(k.stressTest(id)))
+  } catch (e) {
+    rows.push({ id, group: rows.at(-1)?.group ?? '', title: id, possible: true, status: 'fail', rawOk: false, rawWhy: '', rawMs: 0, oursMs: 0, strategy: '', error: `kernel crashed: ${e.message}`, note: '', badEdges: [], badFaces: [], steps: [] })
+    k = await create()
+  }
+}
 const total = performance.now() - t0
 const build = existsSync(resolve(dir, 'BUILD.txt')) ? readFileSync(resolve(dir, 'BUILD.txt'), 'utf8').trim() : 'unknown build'
 

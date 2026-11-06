@@ -1778,6 +1778,9 @@ val modify(val it, val spec) {
 /** Run the kernel stress tests (kernel/stress.hxx); `filter` = id prefix or group, "" for all. JSON text. */
 std::string stressTest(std::string filter) { return stress::json(stress::runAll(filter)); }
 
+/** Ids of the stress cases (JSON array), to run them one at a time. */
+std::string stressIds() { return stress::ids(); }
+
 /** Forget cached bodies (when the document is cleared). */
 void forgetShapes() { g_shapes.clear(); }
 
@@ -1790,5 +1793,6 @@ EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("solid", &solid);
   emscripten::function("modify", &modify);
   emscripten::function("stressTest", &stressTest);
+  emscripten::function("stressIds", &stressIds);
   emscripten::function("forgetShapes", &forgetShapes);
 }

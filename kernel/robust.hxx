@@ -27,6 +27,7 @@
 #include <BRepAlgoAPI_Check.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Defeaturing.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
@@ -1058,6 +1059,56 @@ inline Result blend(Blend kind, const TopoDS_Shape& input, const std::vector<Edg
       // Exactly the face width (a full round) is the one place OCCT fails but
       // the shape exists; say so rather than "too big".
       return fail(r, "A " + num(want) + " mm " + noun + " won't fit on " + edgeName(ix, e) + ": the faces beside it only leave room for " + num(r.hint) + " mm.");
+    }
+  }
+
+  // Pre-check: a blend that runs off a narrow face where the edge ends (e.g. a
+  // 5 mm chamfer down the corner of a 3 mm walled box, ending on the rim).
+  // OpenCascade doesn't fail cleanly there, it crashes.
+  {
+    std::set<int> picked;
+    for (auto& es : list) picked.insert(es.edge);
+    for (auto& es : list) {
+      const TopoDS_Edge e = TopoDS::Edge(ix.edges.FindKey(es.edge + 1));
+      const auto side = ix.facesOf(e);
+      TopoDS_Vertex v0, v1;
+      TopExp::Vertices(e, v0, v1);
+      const double want = std::max(es.r1, es.r2);
+      for (const TopoDS_Vertex& v : {v0, v1}) {
+        if (v.IsNull()) continue;
+        const int at = ix.vertexEdges.FindIndex(v);
+        if (!at) continue;
+        // Neighbouring edges at that vertex also being blended: the corner is shared, leave it to the algorithm.
+        bool shared = false;
+        std::vector<TopoDS_Face> ends;
+        for (TopTools_ListIteratorOfListOfShape it(ix.vertexEdges.FindFromIndex(at)); it.More(); it.Next()) {
+          const int k = ix.edge(it.Value());
+          if (k != es.edge && picked.count(k)) shared = true;
+          for (auto& f : ix.facesOf(TopoDS::Edge(it.Value())))
+            if (std::none_of(side.begin(), side.end(), [&](const TopoDS_Face& g) { return g.IsSame(f); }) &&
+                std::none_of(ends.begin(), ends.end(), [&](const TopoDS_Face& g) { return g.IsSame(f); }))
+              ends.push_back(f);
+        }
+        if (shared) continue;
+        for (auto& f : ends) {
+          // How far the face reaches from the vertex: its nearest edge that doesn't touch the vertex.
+          double reach = std::numeric_limits<double>::infinity();
+          for (TopExp_Explorer ex(f, TopAbs_EDGE); ex.More(); ex.Next()) {
+            TopoDS_Vertex a, b;
+            TopExp::Vertices(TopoDS::Edge(ex.Current()), a, b);
+            if (a.IsSame(v) || b.IsSame(v)) continue;
+            BRepExtrema_DistShapeShape dd(v, ex.Current());
+            if (dd.IsDone() && dd.NbSolution() > 0) reach = std::min(reach, dd.Value());
+          }
+          if (want > reach * (1 - 1e-6)) {
+            r.badEdges.push_back(es.edge);
+            r.badFaces.push_back(ix.face(f));
+            r.hint = std::floor(reach * 0.98 * 100) / 100;
+            return fail(r, "A " + num(want) + " mm " + noun + " on " + edgeName(ix, e) + " runs off the end: " + faceName(ix, f) + " where the edge ends is only " +
+                               num(reach) + " mm across there. Use under " + num(reach) + " mm, or round that face's edges too.");
+          }
+        }
+      }
     }
   }
 
