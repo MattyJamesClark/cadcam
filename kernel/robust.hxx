@@ -36,6 +36,7 @@
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
@@ -118,11 +119,25 @@ inline int count(const TopoDS_Shape& s, TopAbs_ShapeEnum t) {
   return m.Extent();
 }
 
+/**
+ * Volume, remembered for the last few shapes: in a chain of operations the
+ * result checked last time is the input this time, so it isn't recomputed.
+ */
 inline double volume(const TopoDS_Shape& s) {
   if (s.IsNull()) return 0;
+  struct Entry {
+    TopoDS_Shape shape;
+    double v;
+  };
+  static std::vector<Entry> cache;
+  for (auto& e : cache)
+    if (e.shape.IsEqual(s)) return e.v;
   GProp_GProps g;
   BRepGProp::VolumeProperties(s, g, Standard_True);
-  return std::fabs(g.Mass());
+  const double v = std::fabs(g.Mass());
+  if (cache.size() >= 8) cache.erase(cache.begin());
+  cache.push_back({s, v});
+  return v;
 }
 
 inline double area(const TopoDS_Shape& s) {
@@ -290,14 +305,54 @@ inline TopoDS_Shape solidsOnly(const TopoDS_Shape& s) {
   return c;
 }
 
+/**
+ * A body as OpenCascade's algorithms want it: a compound wrapping a single
+ * solid (what fillets, imports and booleans often hand back) becomes the
+ * solid. Offsets and thick solids quietly do nothing on a compound. Face and
+ * edge numbering is unchanged (same sub-shapes in the same order).
+ */
+inline TopoDS_Shape unwrap(const TopoDS_Shape& s) {
+  if (s.IsNull() || (s.ShapeType() != TopAbs_COMPOUND && s.ShapeType() != TopAbs_COMPSOLID)) return s;
+  TopoDS_Shape only;
+  int n = 0;
+  for (TopExp_Explorer ex(s, TopAbs_SOLID); ex.More(); ex.Next()) only = ex.Current(), n++;
+  if (n != 1) return s;
+  // Anything besides the solid (loose faces / edges)? Then keep the compound.
+  if (count(s, TopAbs_FACE) != count(only, TopAbs_FACE)) return s;
+  return only;
+}
+
+/**
+ * Valid B-rep? With `known` (shapes whose faces are already valid, e.g. the
+ * inputs), only the faces the operation made are checked, plus that every
+ * shell is closed: the full check costs more than a boolean on a big body.
+ */
+inline bool isValid(const TopoDS_Shape& s, const TopoDS_Shape& known = TopoDS_Shape()) {
+  if (known.IsNull()) return BRepCheck_Analyzer(s).IsValid();
+  TopTools_IndexedMapOfShape old;
+  TopExp::MapShapes(known, TopAbs_FACE, old);
+  TopoDS_Compound fresh;
+  BRep_Builder b;
+  b.MakeCompound(fresh);
+  int n = 0;
+  TopTools_IndexedMapOfShape faces;
+  TopExp::MapShapes(s, TopAbs_FACE, faces);
+  for (int i = 1; i <= faces.Extent(); i++)
+    if (!old.Contains(faces(i))) b.Add(fresh, faces(i)), n++;
+  for (TopExp_Explorer ex(s, TopAbs_SOLID); ex.More(); ex.Next())
+    for (TopExp_Explorer sh(ex.Current(), TopAbs_SHELL); sh.More(); sh.Next())
+      if (!BRep_Tool::IsClosed(sh.Current())) return false;
+  return n == 0 || BRepCheck_Analyzer(fresh).IsValid();
+}
+
 /** Valid B-rep? If not, ShapeFix gets one go at it. Returns the shape to keep (null if hopeless). */
-inline TopoDS_Shape validOrFixed(const TopoDS_Shape& s, std::string& why, bool& fixed) {
+inline TopoDS_Shape validOrFixed(const TopoDS_Shape& s, std::string& why, bool& fixed, const TopoDS_Shape& known = TopoDS_Shape()) {
   fixed = false;
   if (s.IsNull()) {
     why = "empty result";
     return s;
   }
-  if (BRepCheck_Analyzer(s).IsValid()) return s;
+  if (isValid(s, known)) return s;
   try {
     ShapeFix_Shape fix(s);
     fix.SetPrecision(1e-7);
@@ -328,13 +383,13 @@ struct Expect {
  * a result with a solid missing (the "box vanished" bug), a volume that went
  * the wrong way, or broken topology.
  */
-inline bool accept(TopoDS_Shape& s, const Expect& ex, std::string& why) {
+inline bool accept(TopoDS_Shape& s, const Expect& ex, std::string& why, const TopoDS_Shape& known = TopoDS_Shape()) {
   if (s.IsNull()) {
     if (why.empty()) why = "no result";
     return false;
   }
   bool fixed = false;
-  TopoDS_Shape v = validOrFixed(s, why, fixed);
+  TopoDS_Shape v = validOrFixed(s, why, fixed, known);
   if (v.IsNull()) return false;
   s = v;
   const int n = count(s, TopAbs_SOLID);
@@ -356,7 +411,10 @@ inline bool accept(TopoDS_Shape& s, const Expect& ex, std::string& why) {
   return true;
 }
 
-/** Merge faces split by the operation, and keep the result's tolerances in check. */
+/**
+ * Merge faces split by the operation, and keep the result's tolerances in
+ * check. No validity checks here: the result goes through accept() next.
+ */
 inline TopoDS_Shape tidy(const TopoDS_Shape& s, bool unify = true) {
   TopoDS_Shape r = s;
   if (unify) {
@@ -364,7 +422,7 @@ inline TopoDS_Shape tidy(const TopoDS_Shape& s, bool unify = true) {
       ShapeUpgrade_UnifySameDomain u(r, true, true, true);
       u.SetLinearTolerance(1e-6);
       u.Build();
-      if (!u.Shape().IsNull() && BRepCheck_Analyzer(u.Shape()).IsValid()) r = u.Shape();
+      if (!u.Shape().IsNull()) r = u.Shape();
     } catch (const Standard_Failure&) {
     }
   }
@@ -372,11 +430,7 @@ inline TopoDS_Shape tidy(const TopoDS_Shape& s, bool unify = true) {
   // after enough of them the next boolean sees gaps that aren't there. Pull
   // tolerances back to what the geometry really needs.
   try {
-    if (maxTolerance(r) > 1e-5) {
-      TopoDS_Shape c = r;
-      BRepLib::UpdateTolerances(c, Standard_True);
-      if (BRepCheck_Analyzer(c).IsValid()) r = c;
-    }
+    if (maxTolerance(r) > 1e-5) BRepLib::UpdateTolerances(r, Standard_True);
   } catch (const Standard_Failure&) {
   }
   return r;
@@ -459,6 +513,8 @@ struct Ladder {
   Result& res;
   Expect expect;
   bool tidyUp = true;
+  /** Inputs whose faces are known to be valid (only new faces get the full check). */
+  TopoDS_Shape known;
   /** Returns true when this step's shape was kept. */
   bool step(const std::string& name, const std::function<TopoDS_Shape(std::string&)>& f) {
     if (res.ok()) return true;
@@ -473,7 +529,8 @@ struct Ladder {
       why = e.what();
     }
     if (!s.IsNull() && tidyUp) s = tidy(s);
-    const bool good = accept(s, expect, why);
+    if (!s.IsNull()) s = unwrap(s);
+    const bool good = accept(s, expect, why, known);
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     res.steps.push_back(name + (good ? ": ok" : ": " + (why.empty() ? std::string("failed") : why)) + " (" + num(ms) + " ms)");
     if (good) {
@@ -528,16 +585,18 @@ inline TopoDS_Shape runBool(Bool op, const TopoDS_Shape& a, const std::vector<To
  * that lie exactly on each other. Volume bounds catch results that quietly
  * dropped a body.
  */
-inline Result boolean(Bool op, const TopoDS_Shape& a, const std::vector<TopoDS_Shape>& tools) {
+inline Result boolean(Bool op, const TopoDS_Shape& input, const std::vector<TopoDS_Shape>& tools) {
+  const TopoDS_Shape a = unwrap(input);
   Result r;
   if (a.IsNull() || tools.empty()) return fail(r, "Pick the bodies to combine");
-  const double va = volume(a);
+  const double va = op == Bool::Cut ? 0 : volume(a);
   double vt = 0, vtMax = 0;
-  for (auto& t : tools) {
-    const double v = volume(t);
-    vt += v;
-    vtMax = std::max(vtMax, v);
-  }
+  if (op != Bool::Cut)
+    for (auto& t : tools) {
+      const double v = volume(t);
+      vt += v;
+      vtMax = std::max(vtMax, v);
+    }
   const double slack = 1e-6 * std::max(1.0, va + vt) + 1e-3;
   Ladder L{r};
   if (op == Bool::Fuse) {
@@ -545,11 +604,21 @@ inline Result boolean(Bool op, const TopoDS_Shape& a, const std::vector<TopoDS_S
     L.expect.minVolume = std::max(va, vtMax) * (1 - 1e-6) - slack;
     L.expect.maxVolume = (va + vt) * (1 + 1e-6) + slack;
   } else if (op == Bool::Cut) {
+    // No volume window: a cut can only get it wrong by losing everything,
+    // which the solid count catches, and the volume costs as much as the cut.
     L.expect.minSolids = 1;
-    L.expect.maxVolume = va * (1 + 1e-6) + slack;
   } else {
     L.expect.minSolids = 1;
     L.expect.maxVolume = std::min(va, vtMax > 0 ? vtMax : va) * (1 + 1e-6) + slack;
+  }
+  {
+    // Faces that come through a boolean untouched were valid in the inputs.
+    TopoDS_Compound c;
+    BRep_Builder b;
+    b.MakeCompound(c);
+    b.Add(c, a);
+    for (auto& t : tools) b.Add(c, t);
+    L.known = c;
   }
   const double d = diagonal(a);
   bool emptied = false;
@@ -970,7 +1039,8 @@ inline TopoDS_Shape profileBlend(Blend kind, const TopoDS_Shape& body, const Ind
  * chains are followed automatically) or chamfer (equal, two distances, or
  * distance + angle) on edges of a solid.
  */
-inline Result blend(Blend kind, const TopoDS_Shape& body, const std::vector<EdgeSize>& list) {
+inline Result blend(Blend kind, const TopoDS_Shape& input, const std::vector<EdgeSize>& list) {
+  const TopoDS_Shape body = unwrap(input);
   Result r;
   Index ix(body);
   if (!checkEdges(ix, list, r)) return r;
@@ -1162,10 +1232,67 @@ inline TopoDS_Shape shellByDefeature(const TopoDS_Shape& body, const Index& ix, 
 }
 
 /**
+ * Shell by the simple offset: every face moved in on its own and the gaps
+ * stitched (no corner handling, so only when no round is tighter than the
+ * wall), cut out of the body, then each open face's wall cut through by
+ * thickening that face across the wall. For bodies where the joined offset
+ * gives up, e.g. where several rounds meet at a corner patch.
+ */
+inline TopoDS_Shape shellBySimple(const TopoDS_Shape& body, const std::vector<TopoDS_Face>& open, double t, std::string& why) {
+  // Uniform inner offset (every face in by t, open ones too: an open face that
+  // runs tangentially into a round is what the per-face offset can't do).
+  // (The Intersection join can come back "done" with nothing; Arc first.)
+  // The inner body must be smaller than the body, or it's inside out.
+  const double v0 = volume(body);
+  TopoDS_Shape inner;
+  for (GeomAbs_JoinType j : {GeomAbs_Arc, GeomAbs_Intersection}) {
+    BRepOffset_MakeOffset mo;
+    mo.Initialize(body, -t, 1e-4, BRepOffset_Skin, Standard_False, Standard_False, j, Standard_False);
+    mo.MakeOffsetShape();
+    if (!mo.IsDone() || mo.Shape().IsNull()) continue;
+    const double vi = volume(mo.Shape());
+    if (vi > 1e-9 && vi < v0) {
+      inner = mo.Shape();
+      break;
+    }
+  }
+  if (inner.IsNull()) return why = "inner offset failed", TopoDS_Shape();
+  if (count(inner, TopAbs_SOLID) == 0) {
+    BRepBuilderAPI_MakeSolid ms;
+    for (TopExp_Explorer ex(inner, TopAbs_SHELL); ex.More(); ex.Next()) ms.Add(TopoDS::Shell(ex.Current()));
+    if (!ms.IsDone()) return why = "inner offset isn't closed", TopoDS_Shape();
+    inner = ms.Solid();
+    ShapeFix_Solid fs(TopoDS::Solid(inner));
+    fs.Perform();
+    inner = fs.Solid();
+  }
+  std::vector<TopoDS_Shape> tools{inner};
+  for (auto& f : open) {
+    // A slab through the wall under the open face, a little proud of it on both sides.
+    TopoDS_Shape slab;
+    if (BRepAdaptor_Surface(f).GetType() == GeomAbs_Plane) {
+      const gp_Vec n(faceNormal(f));
+      gp_Trsf tr;
+      tr.SetTranslation(n * (t * 0.25));
+      const TopoDS_Shape lifted = BRepBuilderAPI_Transform(f, tr, true).Shape();
+      slab = BRepPrimAPI_MakePrism(lifted, -n * (t * 1.5)).Shape();
+    } else {
+      BRepOffsetAPI_MakeThickSolid th;
+      th.MakeThickSolidBySimple(f, -t * 1.25);
+      if (!th.IsDone()) return why = "couldn't open a face", TopoDS_Shape();
+      slab = th.Shape();
+    }
+    tools.push_back(slab);
+  }
+  return runBool(Bool::Cut, body, tools, 0, BOPAlgo_GlueOff, why);
+}
+
+/**
  * Hollow a solid to wall thickness `t`, leaving `open` faces open (none =
  * closed hollow). outward = walls grow outside the faces instead of inside.
  */
-inline Result shell(const TopoDS_Shape& body, const std::vector<int>& openFaces, double t, bool outward = false) {
+inline Result shell(const TopoDS_Shape& input, const std::vector<int>& openFaces, double t, bool outward = false) {
+  const TopoDS_Shape body = unwrap(input);
   Result r;
   Index ix(body);
   if (!(t > 0)) return fail(r, "The wall thickness must be more than zero");
@@ -1260,6 +1387,8 @@ inline Result shell(const TopoDS_Shape& body, const std::vector<int>& openFaces,
     L.step("sharp inside corners (rounds tighter than the wall)", [&](std::string& why) { return shellByDefeature(body, ix, open, t, why); });
   if (!r.ok() && !outward)
     L.step("offset and cut", [&](std::string& why) { return shellByCut(body, open, t, why); });
+  if (!r.ok() && !outward && preBad.empty())
+    L.step("hollow, then open the faces", [&](std::string& why) { return shellBySimple(body, open, t, why); });
   if (!r.ok()) {
     TopoDS_Shape h = heal(body);
     if (!h.IsSame(body)) {
@@ -1288,7 +1417,8 @@ inline Result shell(const TopoDS_Shape& body, const std::vector<int>& openFaces,
 // ---- offset and thicken -------------------------------------------------------------
 
 /** Grow (+) or shrink (-) a whole solid by `d`, or offset a surface body. */
-inline Result offset(const TopoDS_Shape& body, double d) {
+inline Result offset(const TopoDS_Shape& input, double d) {
+  const TopoDS_Shape body = unwrap(input);
   Result r;
   if (std::fabs(d) < 1e-9) return fail(r, "The distance is zero");
   const bool solid = count(body, TopAbs_SOLID) > 0;
@@ -1373,7 +1503,8 @@ inline Result offset(const TopoDS_Shape& body, double d) {
 }
 
 /** Faces (or a whole surface body) thickened into a solid of thickness t (+ along the normals, - against). */
-inline Result thicken(const TopoDS_Shape& sheet, double t) {
+inline Result thicken(const TopoDS_Shape& input, double t) {
+  const TopoDS_Shape sheet = unwrap(input);
   Result r;
   if (std::fabs(t) < 1e-9) return fail(r, "The thickness is zero");
   if (count(sheet, TopAbs_FACE) == 0) return fail(r, "Pick faces or a surface body to thicken");
@@ -1440,7 +1571,8 @@ inline std::vector<int> tangentNeighbours(const Index& ix, int fi) {
  * along `pull`. Positive angle = the face leans out as it goes along `pull`
  * (narrows away from the neutral plane for outside walls).
  */
-inline Result draft(const TopoDS_Shape& body, const std::vector<int>& faceIdx, double angle, const gp_Dir& pull, const gp_Pln& neutral) {
+inline Result draft(const TopoDS_Shape& input, const std::vector<int>& faceIdx, double angle, const gp_Dir& pull, const gp_Pln& neutral) {
+  const TopoDS_Shape body = unwrap(input);
   Result r;
   Index ix(body);
   if (faceIdx.empty()) return fail(r, "Pick the faces to draft");

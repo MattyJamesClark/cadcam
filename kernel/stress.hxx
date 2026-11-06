@@ -565,6 +565,15 @@ inline std::vector<Spec> cases() {
     TopoDS_Shape lb = loftBlock();
     auto bottom = facesFacing(lb, -gp::DZ());
     shellCase("S9", "Lofted block (freeform faces), 1.5 mm walls, bottom open", lb, bottom, 1.5, 1000, volume(lb));
+    {
+      // Found in the app: two r8 fillets meeting at a corner, top open, 3 mm walls.
+      TopoDS_Shape bb = box(0, 0, 0, 100, 60, 40);
+      auto two = edgesWhere(bb, [](const gp_Pnt& p, const BRepAdaptor_Curve&) { return std::fabs(p.Z() - 40) < 1e-6 && (p.Y() < 1e-6 || std::fabs(p.X() - 100) < 1e-6); });
+      TopoDS_Shape f2 = blend(Blend::Fillet, bb, sized(two, 8)).shape;
+      auto topf = facesWhere(f2, [](const TopoDS_Face& f) { return BRepAdaptor_Surface(f).GetType() == GeomAbs_Plane && faceNormal(f).Angle(gp::DZ()) < 1e-3; });
+      const double vf = volume(f2);
+      shellCase("S12", "Box with two r8 fillets meeting at a corner, 3 mm walls, top open (found in the app)", f2, topf, 3, vf * 0.15, vf * 0.4);
+    }
     TopoDS_Shape holed = rawCut(box(0, 0, 0, 40, 30, 20), cyl(gp_Pnt(20, 15, -1), gp::DZ(), 5, 22));
     shellCase("S11", "Box with a through hole, 2 mm walls, top open (wall round the hole too)", holed, facesFacing(holed, gp::DZ()), 2, 3000, 9000);
     TopoDS_Shape pipe = rawFuse(cyl(gp_Pnt(-30, 0, 0), gp::DX(), 10, 60), cyl(gp_Pnt(0, 0, 0), gp::DZ(), 6, 25));

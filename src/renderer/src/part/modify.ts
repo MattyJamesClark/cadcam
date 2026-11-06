@@ -561,7 +561,7 @@ class ModifyTool {
     }
     const body = this.picks[0]?.object as THREE.Mesh | undefined
     // Thicken makes a new body beside the faces: keep the original showing.
-    if (body && this.kind !== 'thicken') body.visible = !geo
+    if (body && this.kind !== 'thicken') ghost(body, !!geo)
     if (geo && mesh) {
       mesh.updateMatrixWorld()
       this.preview = new THREE.Mesh(geo, previewMaterial(PICKED, 0.85))
@@ -613,8 +613,8 @@ class ModifyTool {
     window.clearTimeout(this.timer)
     this.gen++
     this.setPreview(null)
-    const body = this.picks[0]?.object
-    if (body) body.visible = true
+    const body = this.picks[0]?.object as THREE.Mesh | undefined
+    if (body) ghost(body, false)
     this.off.forEach((f) => f())
     this.prompt.remove()
     this.strip.remove()
@@ -624,6 +624,23 @@ class ModifyTool {
 }
 
 let thickenCount = 0
+
+const INVISIBLE = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+
+/**
+ * Hide a body behind its preview but keep it pickable (so more edges / faces
+ * can still be clicked): its material stops drawing, its edge lines hide.
+ */
+function ghost(mesh: THREE.Mesh, on: boolean): void {
+  if (on && !mesh.userData.ghostOf) {
+    mesh.userData.ghostOf = mesh.material
+    mesh.material = INVISIBLE
+  } else if (!on && mesh.userData.ghostOf) {
+    mesh.material = mesh.userData.ghostOf as THREE.Material
+    delete mesh.userData.ghostOf
+  }
+  for (const c of mesh.children) if (c.name === '__edges') c.visible = !on
+}
 
 /**
  * Handle frame for an edge (world): the middle of the edge, pointing out of
