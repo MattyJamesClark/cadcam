@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import type { ModuleContext } from './types'
 import { Emitter } from './events'
-import { Highlights, pickAt, pickKey, type Pick } from './picking'
+import { Highlights, pickAt, pickKey, selectFilter, type Pick } from './picking'
+import { BoxRubber, boxSelect } from './boxselect'
 
 /**
  * The one selection the whole app works on. A click selects one item at a
@@ -11,6 +12,9 @@ import { Highlights, pickAt, pickKey, type Pick } from './picking'
  * Translate and Delete see them); points, edges and faces are kept here.
  * Previous swaps back the selection before the last change, to recover from a
  * stray click or an accidental clear.
+ * Holding the left button and dragging draws a selection box (left to right:
+ * whole items inside; right to left: anything it touches). Shift (or
+ * Multi-select) adds to the selection, Ctrl takes items out.
  */
 
 const HOVER = 0xfff1a8
@@ -60,8 +64,27 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
     })
     const canvas = vp.renderer.domElement
     let down: { x: number; y: number } | null = null
+    let rubber: BoxRubber | null = null
     canvas.addEventListener('pointerdown', (e) => {
       down = e.button === 0 && !vp.blockPick?.() ? { x: e.clientX, y: e.clientY } : null
+    })
+    // The box follows the pointer even off the canvas (over a panel), like a normal drag.
+    window.addEventListener('pointermove', (e) => {
+      if (!down || !(e.buttons & 1)) return
+      if (!rubber) {
+        if (!BoxRubber.isDrag(e.clientX - down.x, e.clientY - down.y) || vp.blockPick?.()) return
+        rubber = new BoxRubber(vp, down.x, down.y)
+      }
+      rubber.update(e.clientX, e.clientY)
+    })
+    window.addEventListener('pointerup', (e) => {
+      if (e.button !== 0 || !rubber) return
+      const { rect, crossing } = rubber.rect(e.clientX, e.clientY)
+      rubber.dispose()
+      rubber = null
+      down = null
+      const got = boxSelect(vp, ctx.doc, rect, crossing, selectFilter.value)
+      this.applyBox(got.bodies, got.subs, e.ctrlKey ? 'remove' : this.multi || e.shiftKey ? 'add' : 'replace')
     })
     canvas.addEventListener('pointerup', (e) => {
       if (e.button !== 0 || !down) return
@@ -192,6 +215,26 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
     const i = this.subs.findIndex((x) => pickKey(x) === k)
     this.subs = i >= 0 ? this.subs.filter((_, j) => j !== i) : [...this.subs, p]
     this.changed()
+  }
+
+  /** Put what a selection box took into the selection: instead of it, added to it, or taken out of it. */
+  applyBox(bodies: string[], subs: Pick[], mode: 'replace' | 'add' | 'remove'): void {
+    const doc = this.ctx!.doc
+    const keys = new Set(subs.map(pickKey))
+    if (mode === 'remove') {
+      this.subs = this.subs.filter((p) => !keys.has(pickKey(p)))
+      const out = new Set(bodies)
+      doc.select(this.nodes.filter((id) => !out.has(id)))
+      return
+    }
+    if (mode === 'replace') {
+      this.subs = [...subs]
+      doc.select(bodies)
+      return
+    }
+    const have = new Set(this.subs.map(pickKey))
+    this.subs = [...this.subs, ...subs.filter((p) => !have.has(pickKey(p)))]
+    doc.select([...new Set([...this.nodes, ...bodies])])
   }
 
   clear(): void {

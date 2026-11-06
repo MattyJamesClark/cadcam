@@ -394,8 +394,8 @@ export const homeModule: CadModule = {
           label: 'Translate',
           icon: icons.move,
           shortcut: 'T',
-          tooltip: 'Move or copy the selection by a distance (on-screen handle or typed values)',
-          isEnabled: (ctx) => ctx.doc.selection().length > 0,
+          tooltip: 'Move or copy: click a point on the part, then where it goes (or select a set first, box or Shift+click)',
+          isEnabled: (ctx) => !ctx.doc.isEmpty(),
           run: (ctx) => openTranslate(ctx)
         },
         {
