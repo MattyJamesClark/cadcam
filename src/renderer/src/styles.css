@@ -385,3 +385,4 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vs-angle { width: 56px; height: 22px; font-size: 12px; padding: 0 4px; }
 .dim-label.dim-leg { font-size: 10.5px; opacity: .9; padding: 0 4px; }
 .vp-prompt.above-strip { bottom: 100px; }
+.dim-label.handle-label { transform: translate(0, -50%); z-index: 6; border-color: var(--accent); }

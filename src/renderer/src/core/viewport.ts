@@ -70,6 +70,8 @@ export class Viewport extends Emitter<ViewportEvents> {
   blockPick: (() => boolean) | null = null
   /** Called after each frame (to place screen labels on 3D points). */
   readonly afterRender = new Set<() => void>()
+  /** Run just before each frame is drawn (e.g. to keep handles a fixed size on screen). */
+  readonly beforeRender = new Set<(cam: THREE.Camera) => void>()
   displayMode: DisplayMode = 'shaded-edges'
 
   constructor(readonly host: HTMLElement, readonly doc: CadDocument) {
@@ -155,6 +157,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.headLight.position.copy(cam.position)
     this.headLight.target.position.copy(target)
     this.grid.userData.update(cam, target.clone().applyMatrix4(this.workInv), this.nav.pose.dist)
+    this.beforeRender.forEach((f) => f(cam))
     this.renderer.render(this.scene, cam)
     this.viewCube.render(cam)
     this.triad.render(cam)

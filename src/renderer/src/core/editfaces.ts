@@ -5,6 +5,7 @@ import { Highlights, pickAt, pickKey, type Pick } from './picking'
 import { selection } from './selection'
 import { showCmdBar } from './cmdbar'
 import { el, fmt } from './toolpanel'
+import { Handles, type ArrowSpec } from './handles'
 
 /**
  * Edit faces: push / pull faces of a solid by a typed distance along their
@@ -39,6 +40,8 @@ class EditFacesTool {
   private timer = 0
   private busy = false
   private off: (() => void)[] = []
+  private handles: Handles
+  private arrow: ArrowSpec | null = null
 
   constructor(
     private ctx: ModuleContext,
@@ -52,6 +55,8 @@ class EditFacesTool {
     vp.host.append(this.prompt, this.strip)
     vp.blockPick = () => true
     this.buildStrip()
+    this.handles = new Handles(vp)
+    this.off.push(() => this.handles.dispose())
     const bar = showCmdBar(vp.host, { ok: () => void this.ok(), cancel: () => this.close() })
     this.off.push(() => bar.dispose())
 
@@ -60,7 +65,7 @@ class EditFacesTool {
     let queued: PointerEvent | null = null
     const onDown = (e: PointerEvent): void => void (down = e.button === 0 ? { x: e.clientX, y: e.clientY } : null)
     const onUp = (e: PointerEvent): void => {
-      if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return
+      if (e.button !== 0 || !down || this.handles.dragging || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return
       down = null
       const p = pickAt(vp, e, { face: true })
       if (p?.kind === 'face') this.toggle(p)
@@ -96,6 +101,7 @@ class EditFacesTool {
       canvas.removeEventListener('pointermove', onMove)
       window.removeEventListener('keydown', onKey, true)
     })
+    this.placeArrow()
     this.draw()
     this.schedule()
     this.distBox.focus()
@@ -115,6 +121,7 @@ class EditFacesTool {
     this.distBox.addEventListener('input', () => {
       const v = parseFloat(this.distBox.value)
       this.distance = Number.isFinite(v) ? v : 0
+      this.placeArrow()
       this.schedule()
     })
     const flip = el('button', 'btn vs-text', 'Flip')
@@ -122,6 +129,7 @@ class EditFacesTool {
     flip.addEventListener('click', () => {
       this.distance = -this.distance
       this.distBox.value = String(this.distance)
+      this.placeArrow()
       this.schedule()
     })
     g.append(this.distBox, el('span', 'vs-label', 'mm'), flip)
@@ -143,8 +151,35 @@ class EditFacesTool {
     const k = pickKey(p)
     const i = this.faces.findIndex((f) => pickKey(f) === k)
     this.faces = i >= 0 ? this.faces.filter((_, j) => j !== i) : [...this.faces, p]
+    this.placeArrow()
     this.draw()
     this.schedule()
+  }
+
+  /** The drag arrow sits on the first face, pointing out along its normal. */
+  private placeArrow(): void {
+    const f = this.faces[0]
+    if (!f?.normal) {
+      if (this.arrow) this.handles.remove(this.arrow)
+      this.arrow = null
+      return
+    }
+    if (!this.arrow)
+      this.arrow = this.handles.arrow({
+        origin: f.point.clone(),
+        dir: f.normal.clone(),
+        value: this.distance,
+        tip: 'Drag to push / pull the faces (Shift: no snap)',
+        onDrag: (v) => {
+          this.distance = v
+          this.distBox.value = fmt(v)
+          this.schedule()
+        }
+      })
+    this.arrow.origin.copy(f.point)
+    this.arrow.dir.copy(f.normal)
+    this.arrow.value = this.distance
+    this.handles.update()
   }
 
   private draw(): void {

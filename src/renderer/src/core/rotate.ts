@@ -4,6 +4,7 @@ import type { DocNode } from './document'
 import { isPickingPoints, pickPoints } from './pointpick'
 import { showCmdBar } from './cmdbar'
 import { el, fmt } from './toolpanel'
+import { Handles, type RingSpec } from './handles'
 
 /**
  * Rotate tool: turn the selection about an axis, or make rotated copies
@@ -46,6 +47,8 @@ class RotateTool {
   private centreText = el('span', 'vs-readout')
   private off: (() => void)[] = []
   private applying = false
+  private handles: Handles
+  private ring: RingSpec
 
   constructor(private ctx: ModuleContext) {
     const vp = ctx.viewport
@@ -59,6 +62,19 @@ class RotateTool {
     ctx.doc.bounds(this.nodes).getCenter(this.centre)
     this.setAxis('Z')
 
+    this.handles = new Handles(vp)
+    this.ring = this.handles.ring({
+      centre: this.centre.clone(),
+      axis: this.axis.clone(),
+      value: this.angle,
+      tip: 'Drag round to set the angle (snaps to 5°, Shift: free)',
+      onDrag: (v) => {
+        this.angle = v
+        this.angleBox.value = fmt(v)
+        this.preview()
+      }
+    })
+    this.off.push(() => this.handles.dispose())
     this.strip = this.build()
     vp.host.append(this.strip)
     const bar = showCmdBar(vp.host, { ok: () => this.ok(), cancel: () => this.cancel() })
@@ -248,6 +264,9 @@ class RotateTool {
       this.centre.clone().addScaledVector(this.axis, len)
     ])
     this.axisLine.computeLineDistances()
+    this.ring.centre.copy(this.centre)
+    this.ring.axis.copy(this.axis)
+    this.ring.value = this.angle
     this.axisBtns.forEach((btn, k) => btn.classList.toggle('on', k === this.axisName))
     const c = this.centre.clone().applyMatrix4(this.ctx.viewport.workplane.clone().invert())
     this.centreText.textContent = `${fmt(c.x)}, ${fmt(c.y)}, ${fmt(c.z)}`
