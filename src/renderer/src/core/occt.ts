@@ -157,7 +157,7 @@ export interface MeasureItem {
   matrix: number[]
 }
 
-async function kernelCall<T>(op: 'measure' | 'bounds', items: { brep: Uint8Array; [k: string]: unknown }[]): Promise<T> {
+async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces', items: { brep: Uint8Array; [k: string]: unknown }[]): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const w = getWorker()
     if (sentFor !== w) {
@@ -195,6 +195,12 @@ export interface MeasureResult {
 /** Exact properties of 1 or 2 picked items, and how they relate. */
 export function measureCad(items: MeasureItem[]): Promise<MeasureResult> {
   return kernelCall<MeasureResult>('measure', items as unknown as { brep: Uint8Array }[])
+}
+
+/** Push / pull faces of a body along their normals; returns the new body as B-rep bytes. */
+export async function editFacesCad(brep: Uint8Array, faces: number[], distance: number): Promise<Uint8Array> {
+  const res = await kernelCall<{ brep: Uint8Array }>('editFaces', [{ brep, faces, distance }])
+  return res.brep
 }
 
 /** Exact bounding box of bodies; matrices take each body into the frame to measure in. */

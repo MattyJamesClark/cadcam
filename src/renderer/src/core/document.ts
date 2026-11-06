@@ -359,6 +359,22 @@ export class CadDocument extends Emitter<DocEvents> {
     this.history.record({ label: list.length === 1 ? `Move ${list[0].name}` : `Move ${list.length} items`, undo: () => apply(false), redo: () => apply(true) })
   }
 
+  /** Swap a body mesh's geometry (e.g. after a kernel edit). One undo step. */
+  replaceGeometry(id: string, geo: THREE.BufferGeometry, label: string): void {
+    const n = this.nodes.get(id)
+    const mesh = n?.object as THREE.Mesh | undefined
+    if (!n || !mesh?.isMesh) return
+    const before = mesh.geometry
+    const swap = (g: THREE.BufferGeometry): void => {
+      mesh.geometry = g
+      // Edges are rebuilt from the new geometry.
+      for (const c of [...mesh.children]) if (c.name === '__edges') mesh.remove(c)
+      this.emit('changed', undefined)
+    }
+    swap(geo)
+    this.history.record({ label: `${label} ${n.name}`, undo: () => swap(before), redo: () => swap(geo) })
+  }
+
   /** Apply a world-space transform (e.g. a rotation about an axis) to nodes. One undo step. */
   transformWorld(ids: string[], m: THREE.Matrix4, label: string): void {
     const list = this.topOf(ids)

@@ -1,3 +1,4 @@
+import { startContextMenu } from './contextmenu'
 import { selection } from './selection'
 import { startBottomBar } from './bottombar'
 import { startPlanes } from './planes'
@@ -143,7 +144,13 @@ export class Shell {
       doc: this.doc,
       viewport: this.viewport,
       status: (m, k) => this.setStatus(m, k),
-      refreshRibbon: () => this.refreshRibbon()
+      refreshRibbon: () => this.refreshRibbon(),
+      runCommand: (id) => {
+        const c = this.commands.get(id)
+        if (c && (c.isEnabled?.(this.ctx) ?? true)) void c.run(this.ctx)
+        this.refreshRibbon()
+      },
+      command: (id) => this.commands.get(id)
     }
 
     for (const m of this.modules)
@@ -159,6 +166,7 @@ export class Shell {
     selection.start(this.ctx)
     startBottomBar(this.ctx)
     startPlanes(this.ctx)
+    startContextMenu(this.ctx)
     for (const m of this.modules) m.init?.(this.ctx)
     let fitQueued = false
     new ResizeObserver(() => {

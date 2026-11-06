@@ -39,6 +39,13 @@
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepOffset_MakeOffset.hxx>
+#include <BRepLib.hxx>
+#include <ShapeUpgrade_UnifySameDomain.hxx>
+#include <TopTools_ListOfShape.hxx>
 #include <BinTools.hxx>
 #include <IGESCAFControl_Writer.hxx>
 #include <IGESControl_Controller.hxx>
@@ -1259,6 +1266,96 @@ val bounds(val items) {
   }
 }
 
+/**
+ * Edit faces: push / pull faces of a body by a distance along their outward
+ * normal (positive = out, adding material; negative = in, removing it).
+ * Flat faces are swept and fused / cut (robust, like press-pull); any curved
+ * face makes the whole edit go through an offset with per-face values.
+ * item = { key, brep?, faces: [index...], distance } -> { brep: Uint8Array } | { error }
+ */
+val editFaces(val it) {
+  try {
+    const int key = it["key"].as<int>();
+    if (!it["brep"].isUndefined() && !it["brep"].isNull()) {
+      std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(it["brep"]);
+      std::istringstream is(std::string(bytes.begin(), bytes.end()));
+      TopoDS_Shape sh;
+      BinTools::Read(sh, is);
+      g_shapes[key] = sh;
+    }
+    auto found = g_shapes.find(key);
+    if (found == g_shapes.end()) throw std::runtime_error("missing-shape");
+    const TopoDS_Shape body = found->second;
+    const double d = it["distance"].as<double>();
+    if (std::fabs(d) < 1e-9) throw std::runtime_error("Distance is zero");
+    TopTools_IndexedMapOfShape map;
+    TopExp::MapShapes(body, TopAbs_FACE, map);
+    std::vector<TopoDS_Face> faces;
+    val idx = it["faces"];
+    for (int i = 0, n = idx["length"].as<int>(); i < n; i++) {
+      const int k = idx[i].as<int>();
+      if (k < 0 || k >= map.Extent()) throw std::runtime_error("That face no longer matches its body");
+      faces.push_back(TopoDS::Face(map.FindKey(k + 1)));
+    }
+    if (faces.empty()) throw std::runtime_error("No faces picked");
+    bool allFlat = true;
+    for (auto& f : faces) if (BRepAdaptor_Surface(f).GetType() != GeomAbs_Plane) allFlat = false;
+
+    TopoDS_Shape result;
+    if (allFlat) {
+      TopTools_ListOfShape tools;
+      for (auto& f : faces) {
+        gp_Pln pl = BRepAdaptor_Surface(f).Plane();
+        gp_Dir n = pl.Axis().Direction();
+        if (f.Orientation() == TopAbs_REVERSED) n.Reverse();
+        tools.Append(BRepPrimAPI_MakePrism(f, gp_Vec(n) * d).Shape());
+      }
+      TopTools_ListOfShape args;
+      args.Append(body);
+      if (d > 0) {
+        BRepAlgoAPI_Fuse op;
+        op.SetArguments(args);
+        op.SetTools(tools);
+        op.Build();
+        if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pulled out that far");
+        result = op.Shape();
+      } else {
+        BRepAlgoAPI_Cut op;
+        op.SetArguments(args);
+        op.SetTools(tools);
+        op.Build();
+        if (!op.IsDone()) throw std::runtime_error("The faces couldn't be pushed in that far");
+        result = op.Shape();
+      }
+      ShapeUpgrade_UnifySameDomain unify(result, true, true, true);
+      unify.Build();
+      result = unify.Shape();
+    } else {
+      BRepOffset_MakeOffset mo;
+      mo.Initialize(body, 0.0, 1e-4, BRepOffset_Skin, Standard_False, Standard_False, GeomAbs_Intersection, Standard_False);
+      for (auto& f : faces) mo.SetOffsetOnFace(f, d);
+      mo.MakeOffsetShape();
+      if (!mo.IsDone()) throw std::runtime_error("Those faces can't be offset that far");
+      result = mo.Shape();
+    }
+    if (result.IsNull()) throw std::runtime_error("The edit gave an empty body");
+    std::ostringstream os;
+    BinTools::Write(result, os);
+    const std::string str = os.str();
+    val res = val::object();
+    res.set("brep", val(emscripten::typed_memory_view(str.size(), reinterpret_cast<const uint8_t*>(str.data()))).call<val>("slice"));
+    return res;
+  } catch (const Standard_Failure& e) {
+    val err = val::object();
+    err.set("error", std::string("CAD kernel error: ") + (e.GetMessageString() ? e.GetMessageString() : e.DynamicType()->Name()));
+    return err;
+  } catch (const std::exception& e) {
+    val err = val::object();
+    err.set("error", std::string(e.what()));
+    return err;
+  }
+}
+
 /** Forget cached bodies (when the document is cleared). */
 void forgetShapes() { g_shapes.clear(); }
 
@@ -1267,5 +1364,6 @@ EMSCRIPTEN_BINDINGS(cadkernel) {
   emscripten::function("writeCad", &writeCad);
   emscripten::function("measure", &measure);
   emscripten::function("bounds", &bounds);
+  emscripten::function("editFaces", &editFaces);
   emscripten::function("forgetShapes", &forgetShapes);
 }

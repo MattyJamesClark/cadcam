@@ -49,9 +49,10 @@ onmessage = async (ev) => {
   const { id, format, buffer, quality } = ev.data
   try {
     if (ev.data.op === 'write') return await write(id, format, ev.data.spec)
-    if (ev.data.op === 'measure' || ev.data.op === 'bounds') {
+    if (ev.data.op === 'measure' || ev.data.op === 'bounds' || ev.data.op === 'editFaces') {
       const k = await kernel()
-      const res = ev.data.op === 'measure' ? k.measure(ev.data.items) : k.bounds(ev.data.items)
+      const op = ev.data.op
+      const res = op === 'measure' ? k.measure(ev.data.items) : op === 'bounds' ? k.bounds(ev.data.items) : k.editFaces(ev.data.items[0])
       if (res.error) throw new Error(res.error)
       return postMessage({ id, result: res })
     }

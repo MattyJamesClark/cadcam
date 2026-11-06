@@ -11,6 +11,10 @@ export interface ModuleContext {
   status(message: string, kind?: StatusKind): void
   /** Re-evaluate command enabled/active states in the ribbon. */
   refreshRibbon(): void
+  /** Run a command by id (if it exists and is enabled). */
+  runCommand(id: string): void
+  /** Look up a command by id. */
+  command(id: string): Command | undefined
 }
 
 export interface Command {
