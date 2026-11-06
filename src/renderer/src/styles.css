@@ -69,6 +69,10 @@ button { font: inherit; color: inherit; }
 .tab:hover { color: var(--text); background: var(--panel); }
 .tab.active { color: var(--text); background: var(--panel); border-color: var(--line); position: relative; top: 1px; box-shadow: inset 0 2px 0 var(--accent); }
 .tab.planned { font-style: italic; }
+.tab.contextual { color: var(--accent); display: flex; align-items: center; gap: 6px; }
+.tab.contextual::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tab.contextual[hidden] { display: none; }
+.tab.contextual.active { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
 
 /* ribbon */
 .ribbon {
@@ -448,3 +452,15 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .vs-check { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
 .vs-check.hidden { display: none; }
 .part-target { color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.sk-place-hint { color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+.sk-place-list { display: flex; flex-direction: column; gap: 3px; }
+.sk-place-head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 2px; }
+.sk-place-btn { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.sk-place-btn:hover, .sk-place-btn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+.sk-place-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; opacity: .9; }
+.sk-place-label { position: absolute; z-index: 4; transform: translate(4px, -100%); margin-top: -2px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: var(--text); font-size: 11px; white-space: nowrap; pointer-events: none; }
+.sk-place-label.on { border-color: #ffb020; color: #ffb020; }
+.sk-place-bad { color: #ff8a8a; }
+.menu-item.danger { color: #ff8080; }
+.menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, #ff5050 16%, transparent); }
+.sk-row-menu { min-width: 210px; }

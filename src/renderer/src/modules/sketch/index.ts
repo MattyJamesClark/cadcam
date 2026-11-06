@@ -8,10 +8,11 @@ import { emptySketch, type SketchData } from '@/sketch/model'
 import { disposeDrawing, drawSketch } from '@/sketch/render'
 import { findRegions } from '@/sketch/profiles'
 import { ArcTool, CircleTool, DimensionTool, LineTool, PointTool, PolygonTool, RectTool, SlotTool } from '@/sketch/tools'
+import { cancelPlacement, isPlacing, pickPlacement, type Placement } from './placement'
 import { ChamferTool, ExtendTool, FilletTool, MirrorTool, OffsetTool, TrimTool } from '@/sketch/ops'
 
 /**
- * Sketch: 2D constrained sketching on the active work plane, after
+ * Sketch: 2D constrained sketching on a picked plane, flat face or sketch plane, after
  * SolidCraft's sketcher (lines, rectangles, circles, arcs, slots, polygons,
  * construction geometry, relations, driving dimensions, trim / extend /
  * fillet / chamfer / offset / mirror, closed profile detection).
@@ -27,6 +28,7 @@ const svg = (body: string): string =>
 const ico = {
   sketch: svg('<path d="M4 20h16"/><path d="M5 16 15 6l3 3L8 19H5z"/><path d="m13 8 3 3"/>'),
   finish: svg('<path d="M4 20h16"/><path d="m6 12 4 4 8-9"/>'),
+  cancel: svg('<path d="M4 20h16"/><path d="m7 7 10 10M17 7 7 17"/>'),
   look: svg('<rect x="5" y="5" width="14" height="14" rx="1"/><path d="M12 9v6M9 12h6"/>'),
   line: svg('<path d="M5 19 19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/>'),
   centreline: svg('<path d="M5 19 19 5" stroke-dasharray="4 2 1 2"/>'),
@@ -105,7 +107,7 @@ function treeRows(ctx: ModuleContext, tree: HTMLElement): number {
     twisty.disabled = true
     const label = mk('span', 'tree-label')
     label.textContent = s.name
-    label.title = `${s.name} on ${s.planeName ?? 'a work plane'}: double-click to edit`
+    label.title = `${s.name} on ${s.planeName ?? 'a work plane'}: double-click to edit, right-click for more`
     const regions = findRegions(s).length
     const kind = mk('span', 'tree-kind')
     kind.textContent = [`${s.curves.length} ${s.curves.length === 1 ? 'curve' : 'curves'}`, regions ? `${regions} ${regions === 1 ? 'profile' : 'profiles'}` : ''].filter(Boolean).join(' · ')
@@ -120,34 +122,87 @@ function treeRows(ctx: ModuleContext, tree: HTMLElement): number {
     li.addEventListener('dblclick', () => editSketch(ctx, s.id))
     li.addEventListener('contextmenu', (e) => {
       e.preventDefault()
-      if (confirm(`Delete ${s.name}?`)) {
-        if (activeEditor()?.id === s.id) activeEditor()!.close()
-        ctx.doc.removeSketch(s.id)
-      }
+      rowMenu(ctx, s, e.clientX, e.clientY)
     })
     tree.append(li)
   }
   return list.length
 }
 
+/** Right-click menu on a sketch row: edit, sketch on its plane, show / hide, delete. */
+function rowMenu(ctx: ModuleContext, s: SketchData, x: number, y: number): void {
+  document.querySelector('.menu.sk-row-menu')?.remove()
+  const m = document.createElement('div')
+  m.className = 'menu sk-row-menu'
+  const close = (): void => {
+    m.remove()
+    window.removeEventListener('pointerdown', away, true)
+    window.removeEventListener('keydown', esc, true)
+  }
+  const away = (e: Event): void => {
+    if (!m.contains(e.target as Node)) close()
+  }
+  const esc = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      close()
+    }
+  }
+  const editingThis = activeEditor()?.id === s.id
+  const item = (icon: string, label: string, run: () => void, disabled = false, danger = false): void => {
+    const b = document.createElement('button')
+    b.className = 'menu-item' + (danger ? ' danger' : '')
+    b.innerHTML = `<span class="mi-icon">${icon}</span><span class="mi-label"></span><span class="mi-key"></span>`
+    b.querySelector('.mi-label')!.textContent = label
+    b.disabled = disabled
+    b.addEventListener('click', () => {
+      close()
+      run()
+    })
+    m.append(b)
+  }
+  const sep = (): void => void m.append(Object.assign(document.createElement('div'), { className: 'menu-sep' }))
+  item(ico.look, 'Edit sketch', () => editSketch(ctx, s.id), editingThis)
+  item(ico.sketch, 'New sketch on this plane', () => sketchOn(ctx, { matrix: new THREE.Matrix4().fromArray(s.plane), name: s.planeName ?? s.name }), !!activeEditor())
+  sep()
+  item(s.visible ? icons.eyeOff : icons.eye, s.visible ? 'Hide' : 'Show', () =>
+    ctx.doc.updateSketch(s.id, structuredClone(s), { ...structuredClone(s), visible: !s.visible }, s.visible ? `Hide ${s.name}` : `Show ${s.name}`)
+  )
+  item(ico.cancel, 'Delete', () => {
+    if (activeEditor()?.id === s.id) activeEditor()!.close()
+    ctx.doc.removeSketch(s.id)
+    ctx.status(`${s.name} deleted (Ctrl+Z brings it back)`, 'info')
+  }, false, true)
+  document.body.append(m)
+  const r = m.getBoundingClientRect()
+  m.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`
+  m.style.top = `${Math.min(y, window.innerHeight - r.height - 8)}px`
+  window.addEventListener('pointerdown', away, true)
+  window.addEventListener('keydown', esc, true)
+}
+
 // ---- commands -------------------------------------------------------------------------
 
 function newSketch(ctx: ModuleContext): void {
-  const m = ctx.viewport.workplane
-  const plane = ctx.doc.planes.find((p) => new THREE.Matrix4().fromArray(p.matrix).equals(m))
+  if (isPlacing()) return cancelPlacement()
+  pickPlacement(ctx, (at) => sketchOn(ctx, at), () => ctx.refreshRibbon())
+  ctx.refreshRibbon()
+}
+
+function sketchOn(ctx: ModuleContext, at: Placement): void {
   const n = ctx.doc.sketches.length + 1
   let name = `Sketch ${n}`
   for (let i = n; ctx.doc.sketches.some((s) => s.name === name); i++) name = `Sketch ${i + 1}`
-  const sk: SketchData = emptySketch(crypto.randomUUID(), name, m.toArray(), plane?.name ?? 'Absolute')
+  const sk: SketchData = emptySketch(crypto.randomUUID(), name, at.matrix.toArray(), at.name)
   ctx.doc.addSketch(sk)
-  openEditor(ctx, sk.id, true)
-  ctx.status(`${name} on ${sk.planeName}: draw with the Sketch tools, ✓ or Enter when done`, 'info')
+  openEditor(ctx, sk.id, true, at.focus)
+  ctx.status(`${name} on ${at.name}: draw, then Exit sketch (Enter or ✓) when done`, 'info')
   ctx.refreshRibbon()
 }
 
 function editSketch(ctx: ModuleContext, id?: string): void {
   const target = id ?? ctx.doc.sketches.at(-1)?.id
-  if (!target) return ctx.status('No sketches yet: New sketch makes one on the active work plane', 'warn')
+  if (!target) return ctx.status('No sketches yet: use New sketch and pick a plane, a flat face or a sketch', 'warn')
   openEditor(ctx, target)
   ctx.refreshRibbon()
 }
@@ -190,23 +245,39 @@ editorKeys.set('g', () => setAllRelationsShown(!allRelationsShown()))
 export const sketchModule: CadModule = {
   id: 'sketch',
   title: 'Sketch',
-  order: 10,
-  init: (ctx) => {
+  // Its tab shows up just after Part Design.
+  order: 21,
+  // No tab of its own: Part Design's Sketch button asks for a plane, then
+  // these tools come up in a highlighted Sketch tab until the sketch is closed.
+  contextual: true,
+  init(ctx) {
     ctxRef = ctx
     new SketchLayer(ctx)
     addTreeSection({ render: (tree) => treeRows(ctx, tree) })
-    onEditorChange(() => ctxRef?.refreshRibbon())
+    let open = false
+    onEditorChange(() => {
+      const now = !!activeEditor()
+      if (now !== open) {
+        open = now
+        if (now) ctx.enterContext('sketch')
+        else ctx.leaveContext('sketch')
+      }
+      ctxRef?.refreshRibbon()
+    })
   },
   groups: [
     {
-      label: 'Sketch',
+      // Started from Part Design (and the tree), not from this tab.
+      label: 'Start',
+      ribbon: false,
       commands: [
         {
           id: 'sketch.new',
-          label: 'New sketch',
+          label: 'Sketch',
           icon: ico.sketch,
-          tooltip: 'Start a sketch on the active work plane (pick or make one with Planes first)',
+          tooltip: 'New sketch: click a plane (Top, Front, Right or a work plane), a flat face or an existing sketch, then draw',
           isEnabled: () => !editing(),
+          isActive: () => isPlacing(),
           run: (ctx) => newSketch(ctx)
         },
         {
@@ -216,14 +287,27 @@ export const sketchModule: CadModule = {
           tooltip: 'Open the last sketch again (or double-click one in the tree)',
           isEnabled: (ctx) => !editing() && ctx.doc.sketches.length > 0,
           run: (ctx) => editSketch(ctx)
-        },
+        }
+      ]
+    },
+    {
+      label: 'Sketch',
+      commands: [
         {
           id: 'sketch.finish',
-          label: 'Finish',
+          label: 'Exit sketch',
           icon: ico.finish,
-          tooltip: 'Finish the sketch (Enter or the ✓ at the top)',
+          tooltip: 'Keep the sketch and close it (Enter, or the ✓ at the top)',
           isEnabled: editing,
           run: () => activeEditor()?.finish()
+        },
+        {
+          id: 'sketch.cancel',
+          label: 'Cancel',
+          icon: ico.cancel,
+          tooltip: 'Close the sketch and throw away the changes made since it was opened (Esc with no tool running, or the ✕ at the top)',
+          isEnabled: editing,
+          run: () => activeEditor()?.discard()
         }
       ]
     },

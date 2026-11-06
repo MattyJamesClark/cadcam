@@ -98,12 +98,12 @@ export function onEditorChange(fn: () => void): () => void {
 }
 const notify = (): void => watchers.forEach((f) => f())
 
-export function openEditor(ctx: ModuleContext, id: string, isNew = false): SketchEditor | null {
+export function openEditor(ctx: ModuleContext, id: string, isNew = false, focus?: THREE.Vector3): SketchEditor | null {
   if (current?.id === id) return current
   current?.finish()
   const sk = ctx.doc.sketches.find((s) => s.id === id)
   if (!sk) return null
-  current = new SketchEditor(ctx, sk, isNew)
+  current = new SketchEditor(ctx, sk, isNew, focus)
   notify()
   return current
 }
@@ -156,7 +156,7 @@ export class SketchEditor {
   private construction = false
   private valueEdit: { close(apply: boolean): void } | null = null
 
-  constructor(readonly ctx: ModuleContext, sk: SketchData, private isNew: boolean) {
+  constructor(readonly ctx: ModuleContext, sk: SketchData, private isNew: boolean, private focus?: THREE.Vector3) {
     this.id = sk.id
     this.sk = cloneSketch(sk)
     this.base = cloneSketch(sk)
@@ -239,6 +239,7 @@ export class SketchEditor {
     const box = new THREE.Box3()
     for (const p of this.sk.points) box.expandByPoint(this.world([p.x, p.y]))
     if (!box.isEmpty()) pose.target.copy(box.getCenter(new THREE.Vector3()))
+    else if (this.focus) pose.target.copy(this.plane3.projectPoint(this.focus, new THREE.Vector3()))
     else pose.target.copy(new THREE.Vector3().setFromMatrixPosition(this.plane))
     vp.nav.goTo(pose, true)
   }
