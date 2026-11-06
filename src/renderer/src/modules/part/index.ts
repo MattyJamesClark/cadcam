@@ -2,6 +2,7 @@ import type { CadModule, Command, ModuleContext } from '@/core/types'
 import { openFeature, type FeatureKind } from '@/part/feature'
 import { openBoolean, type BoolOp } from '@/part/boolean'
 import type { Mode } from '@/part/common'
+import { openModify, type ModifyKind } from '@/part/modify'
 
 /**
  * Part Design: sketches (the Sketch button) and solids from them (extrude, revolve, sweep) and booleans
@@ -22,6 +23,12 @@ const ico = {
   sweep: svg('<path d="M4 18c0-6 4-11 16-12"/><rect x="2" y="15" width="5" height="5" rx=".5"/><path d="M8 20c1-6 5-10 13-10.5" opacity=".55"/><path d="M18 4.5l2.5 1.5-2.2 1.8"/>'),
   add: svg('<rect x="3" y="8" width="11" height="11" rx="1"/><circle cx="15" cy="9" r="6"/><path d="M15 6.5v5M12.5 9h5"/>'),
   cut: svg('<rect x="3" y="8" width="11" height="11" rx="1"/><path d="M15 3a6 6 0 1 1-6 6" stroke-dasharray="2 1.6"/><path d="M12.5 9h5"/>'),
+  fillet: svg('<path d="M4 20V10a6 6 0 0 1 6-6h10"/><path d="M4 4h6" stroke-dasharray="2 1.6" opacity=".6"/><path d="M4 4v6" stroke-dasharray="2 1.6" opacity=".6"/><path d="M14 14l6 6" opacity=".7"/>'),
+  chamfer: svg('<path d="M4 20V10l6-6h10"/><path d="M4 4h6M4 4v6" stroke-dasharray="2 1.6" opacity=".6"/>'),
+  shell: svg('<path d="M3 8l9-4 9 4v9l-9 4-9-4z"/><path d="M6.5 9.3 12 7l5.5 2.3v6.2L12 18l-5.5-2.5z" opacity=".7"/><path d="M3 8l9 4 9-4M12 12v9" opacity=".35"/>'),
+  draft: svg('<path d="M3 20h18"/><path d="M7 20 9 5h6l2 15"/><path d="M12 3v4" stroke-dasharray="1.6 1.4"/><path d="M5 20 7.5 5" opacity=".35" stroke-dasharray="2 1.6"/>'),
+  offset: svg('<rect x="7" y="7" width="10" height="10" rx="1"/><rect x="3" y="3" width="18" height="18" rx="4" stroke-dasharray="2.4 1.8" opacity=".7"/>'),
+  thicken: svg('<path d="M3 14c4-5 8 3 18-3"/><path d="M3 18c4-5 8 3 18-3" opacity=".6"/><path d="M3 14v4M21 11v4" opacity=".6"/>'),
   intersect: svg('<rect x="3" y="8" width="11" height="11" rx="1" opacity=".55"/><circle cx="14" cy="10" r="6" opacity=".55"/><path d="M8 10.3A6 6 0 0 1 14 4.1V8h0V19H8z" fill="currentColor" opacity=".0"/><path d="M8.1 8.7A6 6 0 0 0 13.5 16V8z" fill="currentColor" opacity=".45"/>')
 }
 
@@ -37,6 +44,11 @@ function featureCmd(kind: FeatureKind, mode: Mode | undefined, id: string, label
     isEnabled: (ctx) => hasSketches(ctx) && (mode !== 'cut' || solids(ctx) > 0),
     run: (ctx) => openFeature(ctx, kind, mode)
   }
+}
+
+const hasBody = (ctx: ModuleContext): boolean => solids(ctx) > 0
+function modifyCmd(kind: ModifyKind, id: string, label: string, icon: string, tooltip: string): Command {
+  return { id, label, icon, tooltip, isEnabled: hasBody, run: (ctx) => openModify(ctx, kind) }
 }
 
 function boolCmd(op: BoolOp, id: string, label: string, icon: string, tooltip: string): Command {
@@ -77,6 +89,17 @@ export const partModule: CadModule = {
         featureCmd('extrude', 'cut', 'part.extrude-cut', 'Extrude cut', ico.extrudeCut, 'Cut a pocket or hole from a body with a sketch profile (through all, a depth, or both sides)'),
         featureCmd('revolve', 'cut', 'part.revolve-cut', 'Revolve cut', ico.revolveCut, 'Cut a turned groove or bore from a body (profile round an axis)'),
         featureCmd('sweep', 'cut', 'part.sweep-cut', 'Sweep cut', ico.sweep, 'Cut a channel along a path')
+      ]
+    },
+    {
+      label: 'Modify',
+      commands: [
+        modifyCmd('fillet', 'part.fillet', 'Fillet', ico.fillet, 'Round edges: constant or variable radius, tangent edges followed. Edges at fault turn red with the largest radius that fits'),
+        modifyCmd('chamfer', 'part.chamfer', 'Chamfer', ico.chamfer, 'Bevel edges: equal, two distances, or distance and angle'),
+        modifyCmd('shell', 'part.shell', 'Shell', ico.shell, 'Hollow a solid to a wall thickness, leaving the faces you pick open'),
+        modifyCmd('draft', 'part.draft', 'Draft', ico.draft, 'Tilt walls for mould release: pull along the work plane Z, hinged at the bottom, top or work plane'),
+        modifyCmd('offset', 'part.offset', 'Offset', ico.offset, 'Grow or shrink a whole body by a distance'),
+        modifyCmd('thicken', 'part.thicken', 'Thicken', ico.thicken, 'Turn faces or a surface body into a solid of a given thickness')
       ]
     },
     {

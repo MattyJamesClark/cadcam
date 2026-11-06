@@ -4,6 +4,7 @@
  * Message in:  { id, format, buffer, quality }           (read)
  *              { id, op: 'write', format, spec }        (write; result is { bytes, skipped, faceted })
  *              { id, op: 'solid', items, spec }          (extrude / revolve / sweep / booleans; result is { brep, solids, volume })
+ *              { id, op: 'modify', items: [item], spec } (fillet / chamfer / shell / offset / thicken / draft / heal; result has error + badEdges / badFaces on failure)
  * Message out: { id, stage, done, total } (progress) | { id, result } | { id, error } */
 import createCadKernel from './cadkernel.js'
 import { readStepInfo } from './step-info.mjs'
@@ -50,6 +51,13 @@ onmessage = async (ev) => {
   const { id, format, buffer, quality } = ev.data
   try {
     if (ev.data.op === 'write') return await write(id, format, ev.data.spec)
+    if (ev.data.op === 'modify') {
+      // Modelling failures come back as data (error + faulty edges / faces), not as a throw.
+      const k = await kernel()
+      const res = k.modify(ev.data.items[0], ev.data.spec)
+      if (res.error === 'missing-shape') throw new Error(res.error)
+      return postMessage({ id, result: res })
+    }
     if (ev.data.op === 'measure' || ev.data.op === 'bounds' || ev.data.op === 'editFaces' || ev.data.op === 'solid') {
       const k = await kernel()
       const op = ev.data.op
@@ -93,6 +101,13 @@ onmessage = async (ev) => {
     }
     postMessage({ id, result }, transfer)
   } catch (e) {
+    // A crash inside the kernel (a wasm trap) leaves it in a broken state:
+    // start a fresh one for the next call (bodies are sent again on demand).
+    if (e instanceof WebAssembly.RuntimeError) {
+      ready = null
+      kernel()
+      return postMessage({ id, error: 'The CAD kernel hit an internal fault on this operation and has been restarted. Try a different size or fewer edges / faces.' })
+    }
     postMessage({ id, error: String((e && e.message) || e) })
   }
 }

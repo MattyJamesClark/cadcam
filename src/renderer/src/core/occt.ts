@@ -157,7 +157,7 @@ export interface MeasureItem {
   matrix: number[]
 }
 
-async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces' | 'solid', items: { brep: Uint8Array; [k: string]: unknown }[], spec?: unknown): Promise<T> {
+async function kernelCall<T>(op: 'measure' | 'bounds' | 'editFaces' | 'solid' | 'modify', items: { brep: Uint8Array; [k: string]: unknown }[], spec?: unknown): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const w = getWorker()
     if (sentFor !== w) {
@@ -246,6 +246,34 @@ export interface SolidResult {
  */
 export function solidCad(bodies: { brep: Uint8Array; matrix?: number[] }[], spec: SolidSpec): Promise<SolidResult> {
   return kernelCall<SolidResult>('solid', bodies, spec)
+}
+
+/** One edge of a fillet / chamfer: its index in the body and size (r2 = end size for a variable fillet, or the second chamfer distance). */
+export interface ModifyEdge {
+  edge: number
+  r1: number
+  r2?: number
+  /** Chamfer by distance and angle (degrees). */
+  angle?: number
+}
+export type ModifySpec =
+  | { op: 'fillet' | 'chamfer'; edges: ModifyEdge[] }
+  | { op: 'shell'; faces: number[]; thickness: number; outward?: boolean }
+  | { op: 'offset'; distance: number }
+  | { op: 'thicken'; faces?: number[]; distance: number }
+  | { op: 'draft'; faces: number[]; angle: number; pull: Vec3; origin: Vec3 }
+  | { op: 'heal' }
+export type ModifyResult =
+  | { brep: Uint8Array; solids: number; volume: number; strategy: string; notes: string[]; steps: string[]; error?: undefined }
+  | { error: string; badEdges: number[]; badFaces: number[]; hint?: number; steps: string[]; brep?: undefined }
+
+/**
+ * Fillet, chamfer, shell, offset, thicken, draft or heal a body through the
+ * kernel's robust layer. Never throws for a modelling failure: the result
+ * then says why in plain words and which edges / faces are at fault.
+ */
+export function modifyCad(brep: Uint8Array, spec: ModifySpec): Promise<ModifyResult> {
+  return kernelCall<ModifyResult>('modify', [{ brep }], spec)
 }
 
 /** Exact bounding box of bodies; matrices take each body into the frame to measure in. */
@@ -443,4 +471,73 @@ function buildScene(res: CadResult): THREE.Object3D {
   const root = build(res.root, null)
   if (res.file) root.userData.fileProps = res.file
   return root
+}
+
+// ---- results of solid modelling ------------------------------------------------
+
+/**
+ * Read a B-rep the kernel returned (an edit, a boolean, an extrude...) into
+ * geometry. A result can hold several separate solids (e.g. Add of two
+ * bodies that don't touch, or a cut that splits a part in two); none of them
+ * may be dropped. One solid: its geometry, as before. Several: a merged
+ * geometry for previews, with every solid kept in `userData.solids` (each with
+ * its own B-rep), which `doc.replaceGeometry` turns into one body per solid.
+ * Transforms applied to the merged geometry are applied to every solid too.
+ */
+export async function solidsGeometry(bytes: Uint8Array): Promise<THREE.BufferGeometry> {
+  const root = await readCadFile('brep', bytes.slice().buffer)
+  root.updateMatrixWorld(true)
+  const solids: THREE.BufferGeometry[] = []
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh || !m.geometry.userData.brep) return
+    const g = m.geometry
+    if (!m.matrixWorld.equals(new THREE.Matrix4())) g.applyMatrix4(m.matrixWorld)
+    g.computeBoundingBox()
+    solids.push(g)
+  })
+  if (!solids.length) throw new Error('The kernel gave no solid')
+  if (solids.length === 1) return solids[0]
+  const merged = mergeForPreview(solids)
+  merged.userData.solids = solids
+  const apply = merged.applyMatrix4.bind(merged)
+  merged.applyMatrix4 = (m: THREE.Matrix4): THREE.BufferGeometry => {
+    apply(m)
+    for (const s of solids) {
+      s.applyMatrix4(m)
+      s.computeBoundingBox()
+    }
+    return merged
+  }
+  return merged
+}
+
+function mergeForPreview(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let nv = 0
+  let ni = 0
+  for (const g of list) {
+    nv += g.getAttribute('position').count
+    ni += g.index ? g.index.count : g.getAttribute('position').count
+  }
+  const pos = new Float32Array(nv * 3)
+  const idx = new Uint32Array(ni)
+  let v = 0
+  let i = 0
+  for (const g of list) {
+    const p = g.getAttribute('position') as THREE.BufferAttribute
+    for (let k = 0; k < p.count; k++) {
+      pos[(v + k) * 3] = p.getX(k)
+      pos[(v + k) * 3 + 1] = p.getY(k)
+      pos[(v + k) * 3 + 2] = p.getZ(k)
+    }
+    if (g.index) for (let k = 0; k < g.index.count; k++) idx[i++] = g.index.getX(k) + v
+    else for (let k = 0; k < p.count; k++) idx[i++] = k + v
+    v += p.count
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  out.setIndex(new THREE.BufferAttribute(idx, 1))
+  out.computeVertexNormals()
+  out.computeBoundingBox()
+  return out
 }

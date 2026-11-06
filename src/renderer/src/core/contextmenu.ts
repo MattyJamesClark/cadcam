@@ -74,9 +74,17 @@ function open(ctx: ModuleContext, e: PointerEvent): void {
     if (c.isEnabled?.(ctx) ?? true) item(c.icon, c.label, () => ctx.runCommand(id), true, c.shortcut ?? '')
   }
 
+  const edges = selection.items.filter((p) => p.kind === 'edge' && (p.object as THREE.Mesh).geometry?.userData.brep)
   if (faces.length) {
     item(icons.editFaces, `Edit face${faces.length === 1 ? '' : 's'}…`, () => openEditFaces(ctx, faces))
+    cmd('part.shell')
+    cmd('part.draft')
     item(icons.thickness, 'Query thickness', () => ctx.runCommand('query.thickness'))
+    sep()
+  }
+  if (edges.length) {
+    cmd('part.fillet')
+    cmd('part.chamfer')
     sep()
   }
   if (hasSel) {

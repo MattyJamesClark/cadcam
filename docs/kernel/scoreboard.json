@@ -1,0 +1,1432 @@
+{
+ "build": "em3-legacy, link -O3, O1 files: extra/ShapeCustom_BSplineRestriction.o extra/ShapeUpgrade_ShapeDivide.o",
+ "date": "2026-11-06T22:56:06.442Z",
+ "rows": [
+  {
+   "id": "F1",
+   "group": "Fillet",
+   "title": "Cube, all 12 edges r2 (three fillets meet at every corner)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 9.53,
+   "oursMs": 14,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (13.6 ms)"
+   ]
+  },
+  {
+   "id": "F2",
+   "group": "Fillet",
+   "title": "Cube corner, three edges with radii 1, 2 and 3 meeting at one vertex",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 12.3,
+   "oursMs": 11,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (10.7 ms)"
+   ]
+  },
+  {
+   "id": "F3",
+   "group": "Fillet",
+   "title": "L-block, concave + convex edges meeting at the inner corner r2",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 16.9,
+   "oursMs": 20.2,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (19.7 ms)"
+   ]
+  },
+  {
+   "id": "F4",
+   "group": "Fillet",
+   "title": "Boss on a plate: round base (concave) and top (convex) edges r2",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.62,
+   "oursMs": 2.99,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.7 ms)"
+   ]
+  },
+  {
+   "id": "F5",
+   "group": "Fillet",
+   "title": "Slot: rolling-ball r2 round a tangent chain (line, arc, line, arc)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.37,
+   "oursMs": 5.04,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.49 ms)"
+   ]
+  },
+  {
+   "id": "F6",
+   "group": "Fillet",
+   "title": "Slot: variable radius 1 to 3 along a tangent chain",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 13.1,
+   "oursMs": 38.7,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (38.1 ms)"
+   ]
+  },
+  {
+   "id": "F7",
+   "group": "Fillet",
+   "title": "Fillet bigger than the faces beside it (r25 on a 20 mm plate)",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 3.22,
+   "oursMs": 0.204,
+   "strategy": "",
+   "error": "A 25 mm fillet won't fit on the 4 mm straight edge (edge 1): the faces beside it only leave room for 20 mm.",
+   "note": "",
+   "hint": 20,
+   "badEdges": [
+    0
+   ],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "F8",
+   "group": "Fillet",
+   "title": "Full round: r5 on both top edges of a 10 mm rib (the fillets use up the whole top face)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 1.16,
+   "oursMs": 29.9,
+   "strategy": "corner profile as a boolean",
+   "error": "",
+   "note": "needed: corner profile as a boolean",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the fillet surfaces couldn't be built (0.988 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (1.01 ms)",
+    "corner profile as a boolean: ok (20.9 ms)"
+   ]
+  },
+  {
+   "id": "F8b",
+   "group": "Fillet",
+   "title": "Fillets that would overlap: r6 on both top edges of a 10 mm rib",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 1.08,
+   "oursMs": 41.2,
+   "strategy": "",
+   "error": "The fillet fails on the 40 mm straight edge (edge 12). The largest radius that fits there is about 4.88 mm.",
+   "note": "",
+   "hint": 4.88,
+   "badEdges": [
+    11
+   ],
+   "badFaces": [],
+   "steps": [
+    "direct: the fillet surfaces couldn't be built (0.971 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (0.963 ms)",
+    "corner profile as a boolean: the blends would overlap (9.79 ms)",
+    "one edge at a time, biggest first: edge 12 failed on its own (5.48 ms)",
+    "one edge at a time, smallest first: edge 12 failed on its own (4.82 ms)"
+   ]
+  },
+  {
+   "id": "F9",
+   "group": "Fillet",
+   "title": "Fillet as tall as the wall: r4 on one top edge of a 4 mm bar (uses up the side face)",
+   "possible": true,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 1.65,
+   "oursMs": 0.164,
+   "strategy": "",
+   "error": "A 4 mm fillet on the 40 mm straight edge (edge 10) runs off the end: the flat face (face 1) where the edge ends is only 4 mm across there. Use under 4 mm, or round that face's edges too.",
+   "note": "",
+   "hint": 3.92,
+   "badEdges": [
+    9
+   ],
+   "badFaces": [
+    0
+   ],
+   "steps": []
+  },
+  {
+   "id": "F10",
+   "group": "Fillet",
+   "title": "Fillet just under the wall height: r3.9 on a 4 mm bar",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.1,
+   "oursMs": 2.4,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.19 ms)"
+   ]
+  },
+  {
+   "id": "F11",
+   "group": "Fillet",
+   "title": "T pipe: r2 on the saddle edge where two cylinders meet",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 12.1,
+   "oursMs": 56.3,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (55 ms)"
+   ]
+  },
+  {
+   "id": "F12",
+   "group": "Fillet",
+   "title": "Sphere scooped from a box: r2 on the plane / sphere edge",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.36,
+   "oursMs": 12.4,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (12.1 ms)"
+   ]
+  },
+  {
+   "id": "F13",
+   "group": "Fillet",
+   "title": "Lofted (freeform) block: r1.5 round the twisted top",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 180,
+   "oursMs": 166,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (165 ms)"
+   ]
+  },
+  {
+   "id": "F14",
+   "group": "Fillet",
+   "title": "Pyramid apex: r1 on four edges meeting at one point",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 33.8,
+   "oursMs": 25.6,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (25.4 ms)"
+   ]
+  },
+  {
+   "id": "F15",
+   "group": "Fillet",
+   "title": "Fillet on a smooth (tangent) edge",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "exception: There are no suitable edges for chamfer or fillet",
+   "rawMs": 0.181,
+   "oursMs": 0.042,
+   "strategy": "",
+   "error": "the 8 mm straight edge (edge 1) is already smooth (its faces meet tangentially), so there's nothing to round",
+   "note": "",
+   "badEdges": [
+    0
+   ],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "F16",
+   "group": "Fillet",
+   "title": "Big job: r0.5 on 100 hole edges at once",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 145,
+   "oursMs": 236,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (218 ms)"
+   ]
+  },
+  {
+   "id": "F17",
+   "group": "Fillet",
+   "title": "Rounded block: r1 round the whole top (a tangent loop of lines and arcs)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.68,
+   "oursMs": 7.18,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.45 ms)"
+   ]
+  },
+  {
+   "id": "F18",
+   "group": "Fillet",
+   "title": "Cube corner with radii 1, 1 and 8 meeting at one vertex (very different sizes)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.52,
+   "oursMs": 4.56,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.28 ms)"
+   ]
+  },
+  {
+   "id": "F19",
+   "group": "Fillet",
+   "title": "Thin-walled cup: r0.9 on both rim edges of a 2 mm wall (fillets nearly meet)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 13.1,
+   "oursMs": 16.2,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (15.5 ms)"
+   ]
+  },
+  {
+   "id": "F20",
+   "group": "Fillet",
+   "title": "Thin-walled cup: r1 on both rim edges of a 2 mm wall (full round rim)",
+   "possible": true,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 9.75,
+   "oursMs": 205,
+   "strategy": "",
+   "error": "The fillet fails on the 30 mm straight edge (edge 2). The largest radius that fits there is about 0.97 mm.",
+   "note": "",
+   "hint": 0.97,
+   "badEdges": [
+    1
+   ],
+   "badFaces": [],
+   "steps": [
+    "direct: the fillet surfaces couldn't be built (9.56 ms)",
+    "polynomial blend surface: the fillet surfaces couldn't be built (9.43 ms)",
+    "corner profile as a boolean: edges meet at a corner (0.47 ms)",
+    "one edge at a time, biggest first: edge 13 failed on its own (20 ms)",
+    "one edge at a time, smallest first: edge 13 failed on its own (19.7 ms)"
+   ]
+  },
+  {
+   "id": "C1",
+   "group": "Chamfer",
+   "title": "Cube, all 12 edges 1 mm",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 8.35,
+   "oursMs": 10.4,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (10 ms)"
+   ]
+  },
+  {
+   "id": "C2",
+   "group": "Chamfer",
+   "title": "Two distances (1 x 3) on one edge",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.24,
+   "oursMs": 2.25,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.02 ms)"
+   ]
+  },
+  {
+   "id": "C3",
+   "group": "Chamfer",
+   "title": "Distance 2 at 30° on one edge",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.38,
+   "oursMs": 2.26,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.02 ms)"
+   ]
+  },
+  {
+   "id": "C5",
+   "group": "Chamfer",
+   "title": "C5",
+   "possible": true,
+   "status": "fail",
+   "rawOk": false,
+   "rawWhy": "",
+   "rawMs": 0,
+   "oursMs": 0,
+   "strategy": "",
+   "error": "kernel crashed: null function or function signature mismatch",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "C6",
+   "group": "Chamfer",
+   "title": "Shelled box (3 mm walls): 2 mm chamfer on an outside corner",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.04,
+   "oursMs": 8.1,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (7.15 ms)"
+   ]
+  },
+  {
+   "id": "C4",
+   "group": "Chamfer",
+   "title": "Chamfer deeper than the plate (6 mm on a 4 mm plate)",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 1.99,
+   "oursMs": 0.092,
+   "strategy": "",
+   "error": "A 6 mm chamfer won't fit on the 20 mm straight edge (edge 10): the faces beside it only leave room for 3.99 mm.",
+   "note": "",
+   "hint": 3.99,
+   "badEdges": [
+    9
+   ],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "S1",
+   "group": "Shell",
+   "title": "Box 2 mm walls, top open",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 5.84,
+   "oursMs": 6.76,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.15 ms)"
+   ]
+  },
+  {
+   "id": "S2",
+   "group": "Shell",
+   "title": "Box 0.05 mm walls (very thin), top open",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 4.07,
+   "oursMs": 6.16,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (5.75 ms)"
+   ]
+  },
+  {
+   "id": "S3",
+   "group": "Shell",
+   "title": "Wall thicker than the box is wide (12 mm on 20 mm), closed",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 5.22,
+   "oursMs": 0.047,
+   "strategy": "",
+   "error": "A 12 mm wall leaves no room inside: the body is only 20 mm across at its thinnest.",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "S4",
+   "group": "Shell",
+   "title": "Rounded box (r4 corners), 2 mm walls: walls thinner than the rounds",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 10.8,
+   "oursMs": 17,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (15.1 ms)"
+   ]
+  },
+  {
+   "id": "S5",
+   "group": "Shell",
+   "title": "Rounded box (r1 corners), 2 mm walls: walls thicker than the rounds (inner corner collapses)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 9.68,
+   "oursMs": 51.2,
+   "strategy": "intersection mode",
+   "error": "",
+   "note": "needed: intersection mode",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: thick solid failed (9.52 ms)",
+    "intersection join: thick solid failed (21.5 ms)",
+    "intersection mode: ok (18.2 ms)"
+   ]
+  },
+  {
+   "id": "S6",
+   "group": "Shell",
+   "title": "Box with all edges r1, 2 mm walls, top open (every fillet tighter than the wall)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "wrong result: volume 23924.1 outside 3000..9000",
+   "rawMs": 3.38,
+   "oursMs": 94.2,
+   "strategy": "sharp inside corners (rounds tighter than the wall)",
+   "error": "",
+   "note": "needed: sharp inside corners (rounds tighter than the wall)",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the result is bigger than it can be (23924.1 mm³) (8.4 ms)",
+    "intersection join: the result is bigger than it can be (23924.1 mm³) (7.97 ms)",
+    "intersection mode: the result is bigger than it can be (23924.1 mm³) (39.3 ms)",
+    "sharp inside corners (rounds tighter than the wall): ok (31 ms)"
+   ]
+  },
+  {
+   "id": "S7",
+   "group": "Shell",
+   "title": "Cylinder cup, 1 mm walls, top open",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.66,
+   "oursMs": 2.56,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.14 ms)"
+   ]
+  },
+  {
+   "id": "S8",
+   "group": "Shell",
+   "title": "Hollow sphere (closed, no faces open), 2 mm",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "wrong result: volume 24429 outside 9076.3..9086.3",
+   "rawMs": 0.224,
+   "oursMs": 3.17,
+   "strategy": "offset and cut",
+   "error": "",
+   "note": "needed: offset and cut",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "offset and cut: ok (2.78 ms)"
+   ]
+  },
+  {
+   "id": "S9",
+   "group": "Shell",
+   "title": "Lofted block (freeform faces), 1.5 mm walls, bottom open",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 612,
+   "oursMs": 604,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (602 ms)"
+   ]
+  },
+  {
+   "id": "S12",
+   "group": "Shell",
+   "title": "Box with two r8 fillets meeting at a corner, 3 mm walls, top open (found in the app)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "wrong result: volume 237852 outside 35677.7..95140.6",
+   "rawMs": 10.8,
+   "oursMs": 150,
+   "strategy": "hollow, then open the faces",
+   "error": "",
+   "note": "needed: hollow, then open the faces",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the result is bigger than it can be (237852 mm³) (11.9 ms)",
+    "intersection join: the result is bigger than it can be (237852 mm³) (48.4 ms)",
+    "intersection mode: the result is bigger than it can be (237852 mm³) (12.8 ms)",
+    "offset and cut: the result is bigger than it can be (237852 mm³) (44.1 ms)",
+    "hollow, then open the faces: ok (32.1 ms)"
+   ]
+  },
+  {
+   "id": "S11",
+   "group": "Shell",
+   "title": "Box with a through hole, 2 mm walls, top open (wall round the hole too)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 7.51,
+   "oursMs": 8.68,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (7.87 ms)"
+   ]
+  },
+  {
+   "id": "S10",
+   "group": "Shell",
+   "title": "T pipe, 1 mm walls, all three ends open",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 4.87,
+   "oursMs": 40.8,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (39.4 ms)"
+   ]
+  },
+  {
+   "id": "O1",
+   "group": "Offset",
+   "title": "Grow a cube by 2 mm (rounded edges and corners)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 6.62,
+   "oursMs": 14.8,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (14.2 ms)"
+   ]
+  },
+  {
+   "id": "O2",
+   "group": "Offset",
+   "title": "Shrink a cube by 2 mm",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 5.2,
+   "oursMs": 6.28,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (5.89 ms)"
+   ]
+  },
+  {
+   "id": "O3",
+   "group": "Offset",
+   "title": "Grow a lofted (freeform) solid by 1 mm",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 11.6,
+   "oursMs": 43.4,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (42.4 ms)"
+   ]
+  },
+  {
+   "id": "O4",
+   "group": "Offset",
+   "title": "Thicken a wavy freeform surface by 2 mm",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 7.38,
+   "oursMs": 7.48,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.82 ms)"
+   ]
+  },
+  {
+   "id": "O5",
+   "group": "Offset",
+   "title": "Thicken a saddle (doubly curved) surface by 1 mm",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.72,
+   "oursMs": 7.11,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.56 ms)"
+   ]
+  },
+  {
+   "id": "O6",
+   "group": "Offset",
+   "title": "Thicken a tightly rippled surface by 3 mm (ripples tighter than the thickness)",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "wrong result: invalid B-rep",
+   "rawMs": 11.5,
+   "oursMs": 1134.59,
+   "strategy": "",
+   "error": "The faces couldn't be thickened by 3 mm: they curve more tightly than that somewhere, or fold back on themselves.",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the result is smaller than it can be (4247.16 mm³) (375 ms)",
+    "simple thicken: the result is smaller than it can be (4138.95 mm³) (369 ms)",
+    "arc join: the result isn't a valid solid (377 ms)"
+   ]
+  },
+  {
+   "id": "O7",
+   "group": "Offset",
+   "title": "Shrink a block with r1 corners by 2 mm (the rounds collapse to sharp corners)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 7.73,
+   "oursMs": 106,
+   "strategy": "sharp corners where rounds collapse",
+   "error": "",
+   "note": "needed: sharp corners where rounds collapse",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "sharp corners where rounds collapse: ok (104 ms)"
+   ]
+  },
+  {
+   "id": "O8",
+   "group": "Offset",
+   "title": "Grow a block with a 3 mm slot by 2 mm (the slot closes up)",
+   "possible": true,
+   "status": "fixed",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 13.8,
+   "oursMs": 38.8,
+   "strategy": "intersection mode",
+   "error": "",
+   "note": "needed: intersection mode",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the result is smaller than it can be (0 mm³) (13.3 ms)",
+    "intersection join: the result is smaller than it can be (0 mm³) (3.87 ms)",
+    "intersection mode: ok (20.9 ms)"
+   ]
+  },
+  {
+   "id": "D1",
+   "group": "Draft",
+   "title": "Cube, four sides 3° about the base",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 6.16,
+   "oursMs": 2.55,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.01 ms)"
+   ]
+  },
+  {
+   "id": "D2",
+   "group": "Draft",
+   "title": "Rounded block: draft one flat wall that runs tangent into round corners",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.76,
+   "oursMs": 5.41,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.8 ms)"
+   ]
+  },
+  {
+   "id": "D3",
+   "group": "Draft",
+   "title": "Draft the top face (it faces along the pull)",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "exception: Standard_ConstructionError",
+   "rawMs": 0.138,
+   "oursMs": 0.038,
+   "strategy": "",
+   "error": "the flat face (face 6) faces straight along the pull direction, so it can't be drafted (it would tilt sideways). Draft the side walls instead.",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [
+    5
+   ],
+   "steps": []
+  },
+  {
+   "id": "D5",
+   "group": "Draft",
+   "title": "Rounded block: all walls and corner rounds 2° (a mould core)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.85,
+   "oursMs": 7.78,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.8 ms)"
+   ]
+  },
+  {
+   "id": "D4",
+   "group": "Draft",
+   "title": "Cylinder wall 5° (becomes a cone)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 0.53,
+   "oursMs": 0.951,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (0.897 ms)"
+   ]
+  },
+  {
+   "id": "B1",
+   "group": "Boolean",
+   "title": "Two boxes sharing a whole face (coincident faces), add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.39,
+   "oursMs": 4.4,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.13 ms)"
+   ]
+  },
+  {
+   "id": "B2",
+   "group": "Boolean",
+   "title": "Two boxes sharing part of a face, offset, add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.74,
+   "oursMs": 3.83,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (3.59 ms)"
+   ]
+  },
+  {
+   "id": "B3",
+   "group": "Boolean",
+   "title": "Flush cut: pocket whose top is level with the top face",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.57,
+   "oursMs": 3.14,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (3.11 ms)"
+   ]
+  },
+  {
+   "id": "B4",
+   "group": "Boolean",
+   "title": "Near-coincident: second box 0.00001 mm into the first, add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 6.2,
+   "oursMs": 7.89,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (7.65 ms)"
+   ]
+  },
+  {
+   "id": "B5",
+   "group": "Boolean",
+   "title": "Near-coincident gap: second box 0.00001 mm away, add (should stay 2 bodies or join)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1.15,
+   "oursMs": 1.54,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (1.32 ms)"
+   ]
+  },
+  {
+   "id": "B6",
+   "group": "Boolean",
+   "title": "Cylinder lying tangent on a box face (line contact), add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.78,
+   "oursMs": 3.75,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (3.5 ms)"
+   ]
+  },
+  {
+   "id": "B7",
+   "group": "Boolean",
+   "title": "Sphere touching a box at one point, add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.18,
+   "oursMs": 2.64,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (2.38 ms)"
+   ]
+  },
+  {
+   "id": "B8",
+   "group": "Boolean",
+   "title": "Same-radius coaxial cylinders end to end (coincident round faces), add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.98,
+   "oursMs": 3.83,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (3.57 ms)"
+   ]
+  },
+  {
+   "id": "B9",
+   "group": "Boolean",
+   "title": "A body added to an identical copy of itself",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 2.77,
+   "oursMs": 3.49,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (3.25 ms)"
+   ]
+  },
+  {
+   "id": "B10",
+   "group": "Boolean",
+   "title": "Sliver faces: cutter rotated 0.001° off the top face",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 4.36,
+   "oursMs": 4.67,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.64 ms)"
+   ]
+  },
+  {
+   "id": "B14",
+   "group": "Boolean",
+   "title": "Hole touching the side wall from inside (r5 hole, centre 5 mm from the wall)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 5.26,
+   "oursMs": 5.73,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (5.68 ms)"
+   ]
+  },
+  {
+   "id": "B15",
+   "group": "Boolean",
+   "title": "Cylinder exactly on a fillet's round face (coincident curved faces), add: nothing should change",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 9.43,
+   "oursMs": 11,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (10.3 ms)"
+   ]
+  },
+  {
+   "id": "B16",
+   "group": "Boolean",
+   "title": "Box standing on its edge on another box's face (line contact), add",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 3.02,
+   "oursMs": 4.34,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (4.02 ms)"
+   ]
+  },
+  {
+   "id": "B11",
+   "group": "Boolean",
+   "title": "Cut that removes the whole body (should say so, not return nothing)",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "wrong result: 0 solids, expected 1",
+   "rawMs": 1.62,
+   "oursMs": 1.35,
+   "strategy": "",
+   "error": "The cut removes the whole body",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: the result has no solid left (1.32 ms)"
+   ]
+  },
+  {
+   "id": "B12",
+   "group": "Boolean",
+   "title": "Cut splitting a body in two (must keep both pieces)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 5.24,
+   "oursMs": 6.14,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (6.11 ms)"
+   ]
+  },
+  {
+   "id": "B13",
+   "group": "Boolean",
+   "title": "Edit faces on a box + cylinder Add result: pull the round face out 2 mm (the 'box vanished' bug)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 4.35,
+   "oursMs": 6.95,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": [
+    "direct: ok (5.22 ms)"
+   ]
+  },
+  {
+   "id": "T1",
+   "group": "Tolerance",
+   "title": "60 booleans in a row with near-miss edges: still valid, tolerances still tight",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1653.97,
+   "oursMs": 2737.62,
+   "strategy": "tidy after every step",
+   "error": "",
+   "note": "max tolerance 1.5e-07 mm",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "I1",
+   "group": "Import",
+   "title": "STEP with corner points nudged 0.002 mm (faces don't quite meet)",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 43.7,
+   "oursMs": 7.8,
+   "strategy": "direct",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "I2",
+   "group": "Import",
+   "title": "STEP with a face missing from the shell",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "wrong result: 0 solids, expected 1",
+   "rawMs": 4.66,
+   "oursMs": 13.6,
+   "strategy": "healed",
+   "error": "The body has a hole in it (a face is missing), so it came in as a surface body: the body has gaps between its faces, so it stays a surface body",
+   "note": "the body has gaps between its faces, so it stays a surface body",
+   "badEdges": [],
+   "badFaces": [
+    0
+   ],
+   "steps": []
+  },
+  {
+   "id": "I3",
+   "group": "Import",
+   "title": "STEP file cut off half way",
+   "possible": false,
+   "status": "clear",
+   "rawOk": false,
+   "rawWhy": "not done",
+   "rawMs": 0.578,
+   "oursMs": 0.472,
+   "strategy": "",
+   "error": "The file couldn't be read: it is cut short or isn't STEP.",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "P1",
+   "group": "Speed",
+   "title": "Plate with 400 holes, cut in one go",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 845,
+   "oursMs": 1262.44,
+   "strategy": "one boolean, all tools",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  },
+  {
+   "id": "P2",
+   "group": "Speed",
+   "title": "Plate with 100 holes, cut one at a time",
+   "possible": true,
+   "status": "pass",
+   "rawOk": true,
+   "rawWhy": "",
+   "rawMs": 1720.83,
+   "oursMs": 3196.92,
+   "strategy": "100 booleans",
+   "error": "",
+   "note": "",
+   "badEdges": [],
+   "badFaces": [],
+   "steps": []
+  }
+ ]
+}

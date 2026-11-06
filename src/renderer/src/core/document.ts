@@ -367,6 +367,22 @@ export class CadDocument extends Emitter<DocEvents> {
     const n = this.nodes.get(id)
     const mesh = n?.object as THREE.Mesh | undefined
     if (!n || !mesh?.isMesh) return
+    // A result made of several separate solids: the body keeps the first, and
+    // each other solid becomes a body of its own beside it (nothing is lost).
+    const solids = geo.userData.solids as THREE.BufferGeometry[] | undefined
+    if (solids && solids.length > 1) {
+      this.history.batch(`${label} ${n.name}`, () => {
+        this.replaceGeometry(id, solids[0], label)
+        mesh.updateMatrixWorld(true)
+        solids.slice(1).forEach((g, k) => {
+          const mat = mesh.material
+          const extra = new THREE.Mesh(g, Array.isArray(mat) ? mat.map((m) => m.clone()) : mat.clone())
+          mesh.matrixWorld.decompose(extra.position, extra.quaternion, extra.scale)
+          this.addBody(extra, `${n.name} (${k + 2})`, n.detail)
+        })
+      })
+      return
+    }
     const before = mesh.geometry
     const swap = (g: THREE.BufferGeometry): void => {
       mesh.geometry = g
