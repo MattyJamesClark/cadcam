@@ -14,6 +14,18 @@ can be changed and used again.
 | Extrude cut, Revolve cut, Sweep cut | The same commands starting in Cut mode. Extrude cut starts with Through all on and aims into the body. |
 | Add, Cut, Intersect | Booleans between bodies. The first body picked is the target (it keeps its name and place in the tree); the rest are tools and are used up unless Keep tools is on. Bodies already selected are used straight away. |
 
+| Fillet | Round edges. Radius typed or dragged on the arrow at the first edge; **Variable** runs from one radius to another along each edge. Tangent edges are followed automatically (round the whole of a slot top with one click). |
+| Chamfer | Bevel edges: **Equal**, **Two distances**, or **Distance + angle**. |
+| Shell | Hollow a solid: click the faces to leave open, set the wall (arrow points into the body). **Outside** grows the walls outward instead. |
+| Draft | Tilt walls for mould release. The pull direction is the active work plane's Z (**Flip pull** for the other way); walls hinge at their **Bottom**, **Top** or the **Work plane**. Rounded corners tangent to a wall are drafted with it. Ring handle sets the angle. |
+| Offset | Grow (+) or shrink (−) a whole body. Rounds that would collapse become sharp corners, like the true offset. |
+| Thicken | Faces (or a surface body) into a solid of a given thickness. A surface body becomes the solid; faces of a solid give a new body. |
+
+Fillet / Chamfer / Shell / Draft are also on the right-click menu for picked edges / faces. All six
+preview the exact kernel result live while you drag. When something can't be done the prompt says
+why in plain words, the edges / faces at fault turn red, and if there's a size that fits (e.g. the
+largest radius) a **Use …** button sets it. See [the kernel notes](kernel/README.md).
+
 Extrude, Revolve and Sweep each have a mode: **New body**, **Add**, **Cut** or **Intersect**. The
 target is found for you (the body the new shape meets); click another body to change it. Extrudes
 aim away from the target when adding and into it when cutting, until you flip or drag them.
@@ -35,6 +47,5 @@ aim away from the target when adding and into it when cutting, until you flip or
 
 ## Next
 
-Fillet and chamfer edges (the kernel already has TKFillet), shell, holes, draft on faces, offset
-start for extrudes ("from a face / up to a face"), patterns of bodies, and sketching straight on a
+Holes, offset start for extrudes ("from a face / up to a face"), patterns of bodies, and sketching straight on a
 face.
