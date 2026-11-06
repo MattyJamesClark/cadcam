@@ -406,3 +406,37 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .sk-box { position: absolute; z-index: 5; border: 1px solid #4da3ff; background: rgba(77, 163, 255, .08); pointer-events: none; }
 .sk-box.crossing { border-style: dashed; border-color: #46a758; background: rgba(70, 167, 88, .08); }
 .sk-strip .vs-field input { width: 64px; }
+.sb-grid { display: flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px 0 5px; border: 1px solid transparent; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.sb-grid svg { width: 13px; height: 13px; }
+.sb-grid:hover { background: var(--panel-3); color: var(--text); }
+.sb-grid .sb-grid-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.sb-grid.on .sb-grid-dot { background: var(--accent); }
+.sb-grid.on { color: var(--text); }
+.grid-panel { box-sizing: border-box; position: fixed; z-index: 1000; width: 272px; padding: 6px 6px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow, 0 10px 30px rgba(0,0,0,.4)); font-size: 12.5px; }
+.gp-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 6px 8px; }
+.gp-title { font-weight: 600; font-size: 13px; }
+.gp-close { width: 22px; height: 22px; border: none; border-radius: 5px; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.gp-close:hover { background: var(--panel-2); color: var(--text); }
+.gp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 7px 8px; border: none; border-radius: 7px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.gp-row:hover { background: var(--panel-2); }
+.gp-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gp-row-title { font-weight: 500; }
+.gp-row-sub { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.gp-switch { flex: none; position: relative; width: 30px; height: 17px; border-radius: 9px; background: var(--panel-3); border: 1px solid var(--line); transition: background .15s; }
+.gp-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.gp-row.on .gp-switch { background: var(--accent); border-color: var(--accent); }
+.gp-row.on .gp-switch::after { transform: translateX(13px); background: #fff; }
+.gp-section { margin: 6px 8px 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.gp-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 7px; }
+.gp-chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.gp-chip { height: 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.gp-chip:hover { border-color: var(--muted); }
+.gp-chip.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.gp-custom { display: flex; gap: 6px; margin-top: 8px; }
+.gp-field { flex: 1; min-width: 0; box-sizing: border-box; display: flex; align-items: center; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.gp-field:focus-within { border-color: var(--accent); }
+.gp-field input { flex: 1; width: 100%; min-width: 0; border: none; background: none; color: var(--text); font: inherit; outline: none; padding: 0; }
+.gp-field input.bad { color: #ff7a7a; }
+.gp-unit { color: var(--muted); font-size: 11px; }
+.gp-apply { flex: none; box-sizing: border-box; height: 28px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); font: inherit; cursor: pointer; }
+.gp-apply:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
