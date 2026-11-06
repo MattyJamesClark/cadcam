@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { ModuleContext } from './types'
-import { editFacesCad, readCadFile } from './occt'
+import { editFacesCad, solidsGeometry } from './occt'
 import { Highlights, pickAt, pickKey, type Pick } from './picking'
 import { selection } from './selection'
 import { showCmdBar } from './cmdbar'
@@ -310,18 +310,8 @@ class EditFacesTool {
     this.say('Working…')
     try {
       const bytes = await editFacesCad(mesh.geometry.userData.brep as Uint8Array, [...new Set(this.faces.map((f) => f.index))], this.distance)
-      const root = await readCadFile('brep', bytes.slice().buffer)
+      const geo = await solidsGeometry(bytes)
       if (id !== this.runId) return null
-      root.updateMatrixWorld(true)
-      let found: THREE.Mesh | null = null
-      root.traverse((o) => {
-        if (!found && (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.userData.brep) found = o as THREE.Mesh
-      })
-      if (!found) throw new Error('The edit gave no solid')
-      const m = found as THREE.Mesh
-      const geo = m.geometry
-      // The kernel keeps the body's own placement inside the B-rep; bake any mesh placement in.
-      if (!m.matrixWorld.equals(new THREE.Matrix4())) geo.applyMatrix4(m.matrixWorld)
       geo.computeBoundingBox()
       this.result = geo
       this.showPreview(geo, mesh)

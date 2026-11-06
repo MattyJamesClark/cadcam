@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { readCadFile, type SolidMake, type SolidSpec, type Vec3 } from '@/core/occt'
+import { solidsGeometry, type SolidMake, type SolidSpec, type Vec3 } from '@/core/occt'
 import type { ModuleContext } from '@/core/types'
 import { el } from '@/core/toolpanel'
 
@@ -15,18 +15,8 @@ export function previewMaterial(color: number, opacity = 0.5): THREE.MeshStandar
 
 /** The kernel's text B-rep read back as a mesh geometry (with its exact B-rep attached for later edits). */
 export async function geometryOf(bytes: Uint8Array): Promise<THREE.BufferGeometry> {
-  const root = await readCadFile('brep', bytes.slice().buffer)
-  root.updateMatrixWorld(true)
-  let found: THREE.Mesh | null = null
-  root.traverse((o) => {
-    if (!found && (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.userData.brep) found = o as THREE.Mesh
-  })
-  if (!found) throw new Error('The kernel gave no solid')
-  const m = found as THREE.Mesh
-  const geo = m.geometry
-  if (!m.matrixWorld.equals(new THREE.Matrix4())) geo.applyMatrix4(m.matrixWorld)
-  geo.computeBoundingBox()
-  return geo
+  // Every solid of the result is kept (see solidsGeometry).
+  return solidsGeometry(bytes)
 }
 
 /** Every body in the document that has an exact B-rep (can take part in solid modelling). */
