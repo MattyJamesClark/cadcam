@@ -8,10 +8,11 @@ import { emptySketch, type SketchData } from '@/sketch/model'
 import { disposeDrawing, drawSketch } from '@/sketch/render'
 import { findRegions } from '@/sketch/profiles'
 import { ArcTool, CircleTool, DimensionTool, LineTool, PointTool, PolygonTool, RectTool, SlotTool } from '@/sketch/tools'
+import { cancelPlacement, isPlacing, pickPlacement } from './placement'
 import { ChamferTool, ExtendTool, FilletTool, MirrorTool, OffsetTool, TrimTool } from '@/sketch/ops'
 
 /**
- * Sketch: 2D constrained sketching on the active work plane, after
+ * Sketch: 2D constrained sketching on a picked plane, flat face or sketch plane, after
  * SolidCraft's sketcher (lines, rectangles, circles, arcs, slots, polygons,
  * construction geometry, relations, driving dimensions, trim / extend /
  * fillet / chamfer / offset / mirror, closed profile detection).
@@ -133,21 +134,27 @@ function treeRows(ctx: ModuleContext, tree: HTMLElement): number {
 // ---- commands -------------------------------------------------------------------------
 
 function newSketch(ctx: ModuleContext): void {
-  const m = ctx.viewport.workplane
-  const plane = ctx.doc.planes.find((p) => new THREE.Matrix4().fromArray(p.matrix).equals(m))
-  const n = ctx.doc.sketches.length + 1
-  let name = `Sketch ${n}`
-  for (let i = n; ctx.doc.sketches.some((s) => s.name === name); i++) name = `Sketch ${i + 1}`
-  const sk: SketchData = emptySketch(crypto.randomUUID(), name, m.toArray(), plane?.name ?? 'Absolute')
-  ctx.doc.addSketch(sk)
-  openEditor(ctx, sk.id, true)
-  ctx.status(`${name} on ${sk.planeName}: draw with the Sketch tools, ✓ or Enter when done`, 'info')
+  if (isPlacing()) return cancelPlacement()
+  pickPlacement(
+    ctx,
+    (at) => {
+      const n = ctx.doc.sketches.length + 1
+      let name = `Sketch ${n}`
+      for (let i = n; ctx.doc.sketches.some((s) => s.name === name); i++) name = `Sketch ${i + 1}`
+      const sk: SketchData = emptySketch(crypto.randomUUID(), name, at.matrix.toArray(), at.name)
+      ctx.doc.addSketch(sk)
+      openEditor(ctx, sk.id, true, at.focus)
+      ctx.status(`${name} on ${at.name}: draw with the Sketch tools, ✓ or Enter when done`, 'info')
+      ctx.refreshRibbon()
+    },
+    () => ctx.refreshRibbon()
+  )
   ctx.refreshRibbon()
 }
 
 function editSketch(ctx: ModuleContext, id?: string): void {
   const target = id ?? ctx.doc.sketches.at(-1)?.id
-  if (!target) return ctx.status('No sketches yet: New sketch makes one on the active work plane', 'warn')
+  if (!target) return ctx.status('No sketches yet: use New sketch and pick a plane, a flat face or a sketch', 'warn')
   openEditor(ctx, target)
   ctx.refreshRibbon()
 }
@@ -205,7 +212,7 @@ export const sketchModule: CadModule = {
           id: 'sketch.new',
           label: 'New sketch',
           icon: ico.sketch,
-          tooltip: 'Start a sketch on the active work plane (pick or make one with Planes first)',
+          tooltip: 'Start a sketch: then click a plane (Top, Front, Right or a work plane), a flat face or an existing sketch to draw on',
           isEnabled: () => !editing(),
           run: (ctx) => newSketch(ctx)
         },
