@@ -3,6 +3,13 @@ const svg = (body: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 
 export const icons = {
+  plotview: svg('<path d="M3 5h18v14H3z"/><path d="M13 14h8M13 14v5"/><path d="M6 8h5v4H6z"/><path d="M15 16.5h4" opacity=".6"/>'),
+  moveSingle: svg('<rect x="3" y="13" width="7" height="7" stroke-dasharray="2 1.6"/><rect x="14" y="4" width="7" height="7"/><path d="M8.5 14.5 14.5 9.5"/><path d="M11 9.3h3.6v3.6"/>'),
+  moveCopies: svg('<rect x="2.5" y="14.5" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="15.5" y="3.5" width="6" height="6"/>'),
+  incremental: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6.5 9.5l3 5M9.5 9.5l-3 5M12 9.5l1.5 2.5 1.5-2.5M13.5 12v2.5M17 9.5h2.5L17 14.5h2.5"/>'),
+  snapPoint: svg('<circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/>'),
+  snapMid: svg('<circle cx="4.5" cy="12" r="2"/><circle cx="19.5" cy="12" r="2"/><path d="M6.5 12h11"/><path d="M12 7v10"/>'),
+  flip: svg('<path d="M4 9h15l-3.5-3.5M20 15H5l3.5 3.5"/>'),
   newDoc: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v6M9 14h6"/>'),
   import: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v3h16v-3"/>'),
   export: svg('<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 17v3h16v-3"/>'),

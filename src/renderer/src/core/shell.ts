@@ -1,6 +1,7 @@
 import { startContextMenu } from './contextmenu'
 import { selection } from './selection'
 import { startBottomBar } from './bottombar'
+import { refreshSideBar, startSideBar } from './sidebar'
 import { startPlanes } from './planes'
 import { startGridControl } from './gridsnap'
 import { setTreeRefresher, treeSections } from './treeext'
@@ -172,6 +173,7 @@ export class Shell {
     startPlanes(this.ctx)
     startGridControl(this.viewport)
     startContextMenu(this.ctx)
+    startSideBar(this.ctx)
     for (const m of this.modules) m.init?.(this.ctx)
     let fitQueued = false
     new ResizeObserver(() => {
@@ -607,6 +609,7 @@ export class Shell {
   }
 
   refreshRibbon(): void {
+    refreshSideBar()
     for (const [id, b] of this.buttons) {
       const c = this.commands.get(id)!
       b.disabled = c.isEnabled ? !c.isEnabled(this.ctx) : false

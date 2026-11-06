@@ -86,19 +86,30 @@ const EDGE_PX = 7
 export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f: Partial<SelectFilter> = selectFilter.value): Pick | null {
   const filter: SelectFilter = { vertex: !!f.vertex, edge: !!f.edge, face: !!f.face, surface: !!f.surface, body: !!f.body }
   const hit = vp.hitTest(vp.ndcOf(e))
+  const rect = vp.renderer.domElement.getBoundingClientRect()
+  const mouse = new THREE.Vector2(e.clientX - rect.left, e.clientY - rect.top)
+  const cam = vp.camera
+  const viewDir = cam.getWorldDirection(new THREE.Vector3())
+  const depth = (p: THREE.Vector3): number => p.clone().sub(cam.position).dot(viewDir)
+  // Things behind the surface under the pointer can't be picked. Off the
+  // model, a corner on the outline a few pixels away still can.
+  const hitDepth = hit ? depth(hit.point) + vp.nav.pose.dist * 0.01 : Infinity
+  if (filter.vertex) {
+    // The body under the pointer, and any other body with a corner within
+    // reach (a corner right on a body's outline is often just off it).
+    let best: { pick: Pick; d: number } | null = null
+    for (const o of snapCandidates(vp, hit?.object ?? null, mouse)) {
+      const got = snapVertex(vp, o, mouse, depth, hitDepth, best ? best.d : VERTEX_PX)
+      if (got) best = got
+    }
+    if (best) return best.pick
+  }
   if (!hit) return null
   const obj = hit.object
   const geo = (obj as THREE.Mesh).geometry
   if (!geo) return null
-  const rect = vp.renderer.domElement.getBoundingClientRect()
-  const mouse = new THREE.Vector2(e.clientX - rect.left, e.clientY - rect.top)
   obj.updateMatrixWorld()
   const mw = obj.matrixWorld
-  const cam = vp.camera
-  const viewDir = cam.getWorldDirection(new THREE.Vector3())
-  const depth = (p: THREE.Vector3): number => p.clone().sub(cam.position).dot(viewDir)
-  // Things behind the surface under the pointer can't be picked.
-  const hitDepth = depth(hit.point) + vp.nav.pose.dist * 0.01
   const isWire = !!(obj as THREE.LineSegments).isLineSegments
   const brep = !!geo.userData.brep
 
@@ -109,37 +120,9 @@ export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f:
   }
 
   if (filter.vertex) {
-    const verts = geo.userData.vertices as Float32Array | undefined
     let best: THREE.Vector3 | null = null
-    let bestIndex = -1
     let bestD = VERTEX_PX
-    if (verts) {
-      for (let i = 0; i < verts.length / 3; i++) {
-        const { s, w } = screenOf(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2])
-        const d = s.distanceTo(mouse)
-        if (d < bestD && depth(w) <= hitDepth) {
-          bestD = d
-          best = w
-          bestIndex = i
-        }
-      }
-      // Circle / arc centres and quadrants, line midpoints.
-      const snaps = snapPoints(geo)
-      let bestSnap = -1
-      for (let i = 0; i < snaps.kinds.length; i++) {
-        const { s, w } = screenOf(snaps.points[i * 3], snaps.points[i * 3 + 1], snaps.points[i * 3 + 2])
-        const d = s.distanceTo(mouse)
-        // Centres sit in the air: a hole's own wall may be in front of them.
-        // A quadrant wins over a B-rep vertex at the same spot (a circle's seam).
-        if (d < bestD + (bestIndex >= 0 ? 1 : 0) && (snaps.kinds[i] === 'centre' || depth(w) <= hitDepth)) {
-          bestD = d
-          best = w
-          bestSnap = i
-        }
-      }
-      if (best && bestSnap >= 0) return { kind: 'point', object: obj, index: -1, point: best, snap: snaps.kinds[bestSnap] }
-      if (best) return { kind: 'vertex', object: obj, index: bestIndex, point: best }
-    } else if (!brep && hit.face) {
+    if (!geo.userData.vertices && !brep && hit.face) {
       // Plain mesh: snap to a corner of the triangle under the pointer.
       const pos = geo.getAttribute('position') as THREE.BufferAttribute
       for (const i of [hit.face.a, hit.face.b, hit.face.c]) {
@@ -199,6 +182,88 @@ export function pickAt(vp: Viewport, e: { clientX: number; clientY: number }, f:
   const sheet = isSheet(obj)
   if ((sheet ? filter.surface : filter.body) || (isWire && !geo.userData.edgeRanges && (filter.body || filter.edge)))
     return { kind: 'body', object: obj, index: -1, point: hit.point.clone() }
+  return null
+}
+
+/** Bodies whose corners could be within reach of the pointer: the one under it first. */
+function snapCandidates(vp: Viewport, under: THREE.Object3D | null, mouse: THREE.Vector2): THREE.Object3D[] {
+  const out: THREE.Object3D[] = []
+  if (under && (under as THREE.Mesh).geometry?.userData.vertices) out.push(under)
+  const box = new THREE.Box3()
+  const c = new THREE.Vector3()
+  for (const n of vp.doc.bodies()) {
+    const o = n.object
+    if (o === under || !vp.doc.isShown(n)) continue
+    const geo = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined
+    if (!geo?.userData.vertices) continue
+    // Objects that opted out of picking (e.g. moving with the pointer).
+    if (Object.prototype.hasOwnProperty.call(o, 'raycast')) continue
+    if (!geo.boundingBox) geo.computeBoundingBox()
+    box.copy(geo.boundingBox!).applyMatrix4(o.matrixWorld)
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (let i = 0; i < 8; i++) {
+      c.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)
+      const s = vp.toScreen(c)
+      minX = Math.min(minX, s.x)
+      maxX = Math.max(maxX, s.x)
+      minY = Math.min(minY, s.y)
+      maxY = Math.max(maxY, s.y)
+    }
+    if (mouse.x >= minX - VERTEX_PX && mouse.x <= maxX + VERTEX_PX && mouse.y >= minY - VERTEX_PX && mouse.y <= maxY + VERTEX_PX) out.push(o)
+  }
+  return out
+}
+
+/** The nearest corner / centre / quadrant / midpoint of one body within `within` pixels, if any is visible. */
+function snapVertex(
+  vp: Viewport,
+  obj: THREE.Object3D,
+  mouse: THREE.Vector2,
+  depth: (p: THREE.Vector3) => number,
+  hitDepth: number,
+  within: number
+): { pick: Pick; d: number } | null {
+  const geo = (obj as THREE.Mesh).geometry
+  const verts = geo.userData.vertices as Float32Array | undefined
+  if (!verts) return null
+  obj.updateMatrixWorld()
+  const mw = obj.matrixWorld
+  const tmp = new THREE.Vector3()
+  const screenOf = (x: number, y: number, z: number): { s: THREE.Vector2; w: THREE.Vector3 } => {
+    const w = tmp.set(x, y, z).applyMatrix4(mw).clone()
+    return { s: vp.toScreen(w), w }
+  }
+  let best: THREE.Vector3 | null = null
+  let bestIndex = -1
+  let bestD = within
+  for (let i = 0; i < verts.length / 3; i++) {
+    const { s, w } = screenOf(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2])
+    const d = s.distanceTo(mouse)
+    if (d < bestD && depth(w) <= hitDepth) {
+      bestD = d
+      best = w
+      bestIndex = i
+    }
+  }
+  // Circle / arc centres and quadrants, line midpoints.
+  const snaps = snapPoints(geo)
+  let bestSnap = -1
+  for (let i = 0; i < snaps.kinds.length; i++) {
+    const { s, w } = screenOf(snaps.points[i * 3], snaps.points[i * 3 + 1], snaps.points[i * 3 + 2])
+    const d = s.distanceTo(mouse)
+    // Centres sit in the air: a hole's own wall may be in front of them.
+    // A quadrant wins over a B-rep vertex at the same spot (a circle's seam).
+    if (d < bestD + (bestIndex >= 0 ? 1 : 0) && (snaps.kinds[i] === 'centre' || depth(w) <= hitDepth)) {
+      bestD = d
+      best = w
+      bestSnap = i
+    }
+  }
+  if (best && bestSnap >= 0) return { pick: { kind: 'point', object: obj, index: -1, point: best, snap: snaps.kinds[bestSnap] }, d: bestD }
+  if (best) return { pick: { kind: 'vertex', object: obj, index: bestIndex, point: best }, d: bestD }
   return null
 }
 
