@@ -2,6 +2,7 @@ import { startContextMenu } from './contextmenu'
 import { selection } from './selection'
 import { startBottomBar } from './bottombar'
 import { startPlanes } from './planes'
+import { setTreeRefresher, treeSections } from './treeext'
 import * as THREE from 'three'
 import { CadDocument, type DocNode, type Measure } from './document'
 import { icons } from './icons'
@@ -627,10 +628,12 @@ export class Shell {
       const tree = this.els.tree
       tree.innerHTML = ''
       this.rowsById.clear()
-      this.els.docName.textContent = this.doc.name + (this.doc.history.dirty && !this.doc.isEmpty() ? ' •' : '')
+      this.els.docName.textContent = this.doc.name + (this.doc.history.dirty && (!this.doc.isEmpty() || this.doc.sketches.length > 0) ? ' •' : '')
       this.els.docName.title = this.doc.filePath ?? this.doc.name
       if (this.doc.isEmpty()) {
-        tree.append(h('li', 'tree-empty', 'Nothing here yet. Import a file or add a shape from the Home tab.'))
+        let extra = 0
+        for (const sec of treeSections()) extra += sec.render(tree)
+        if (!extra) tree.append(h('li', 'tree-empty', 'Nothing here yet. Import a file or add a shape from the Home tab.'))
         return
       }
       const sel = new Set(this.doc.selection())
@@ -689,8 +692,10 @@ export class Shell {
         if (n.expanded) n.children.forEach((c) => row(c, depth + 1))
       }
       this.doc.roots.forEach((r) => row(r, 0))
+      for (const sec of treeSections()) sec.render(tree)
       tree.querySelector('.selected')?.scrollIntoView({ block: 'nearest' })
     }
+    setTreeRefresher(render)
     this.doc.on('changed', () => {
       render()
       this.renderProps()

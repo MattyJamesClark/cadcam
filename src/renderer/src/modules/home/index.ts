@@ -93,6 +93,7 @@ export async function importFiles(ctx: ModuleContext, files: PickedFile[], repla
     for (const r of single.project.roots) doc.addRestored(r.object, r.meta)
     doc.setDims(single.project.dims)
     doc.setPlanes(single.project.planes)
+    doc.setSketches(single.project.sketches)
     doc.name = single.f.name
     doc.filePath = single.f.path ?? null
     doc.history.markSaved()
@@ -151,7 +152,7 @@ export async function saveDesign(ctx: ModuleContext, as: boolean): Promise<boole
 
 /** Before throwing the design away: true if it's fine to continue. */
 export async function confirmDiscard(ctx: ModuleContext, action: string): Promise<boolean> {
-  if (ctx.doc.isEmpty() || !ctx.doc.history.dirty) return true
+  if ((ctx.doc.isEmpty() && !ctx.doc.sketches.length) || !ctx.doc.history.dirty) return true
   return confirm(`${action}? Unsaved changes to ${ctx.doc.name} will be lost (you can still undo it).`)
 }
 

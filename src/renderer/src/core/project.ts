@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { SketchData } from '../sketch/model'
 import type { CadDocument, Dimension, DocNode, WorkPlane } from './document'
 
 /**
@@ -209,7 +210,7 @@ export function saveProject(doc: CadDocument, appVersion?: string): Uint8Array {
     tagged.forEach((o) => delete o.userData.__node)
   }
 
-  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson, dims: doc.dims, planes: doc.planes.filter((p) => !p.temp) }
+  const json = { format: 'cadcam-studio', version: 1, app: appVersion, name: doc.name, roots, geometries: geoJson, materials: matJson, dims: doc.dims, planes: doc.planes.filter((p) => !p.temp), sketches: doc.sketches }
   const text = new TextEncoder().encode(JSON.stringify(json))
   const jsonLen = text.byteLength + ((4 - (text.byteLength % 4)) % 4)
   const out = new Uint8Array(8 + jsonLen + size)
@@ -232,7 +233,7 @@ export function isProject(data: ArrayBuffer): boolean {
 }
 
 /** Read a project into objects ready for CadDocument.addRestored. */
-export function readProject(data: ArrayBuffer): { name: string; roots: { object: THREE.Object3D; meta: RootJson['meta'] }[]; dims: Dimension[]; planes: WorkPlane[] } {
+export function readProject(data: ArrayBuffer): { name: string; roots: { object: THREE.Object3D; meta: RootJson['meta'] }[]; dims: Dimension[]; planes: WorkPlane[]; sketches: SketchData[] } {
   if (!isProject(data)) throw new Error('Not a CADCAM Studio project file')
   const jsonLen = new DataView(data).getUint32(4, true)
   const json = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 8, jsonLen))) as ProjectJson & {
@@ -303,6 +304,7 @@ export function readProject(data: ArrayBuffer): { name: string; roots: { object:
     name: json.name,
     roots: json.roots.map((r) => ({ object: build(r.obj), meta: r.meta })),
     dims: ((json as { dims?: Dimension[] }).dims ?? []) as Dimension[],
-    planes: ((json as { planes?: WorkPlane[] }).planes ?? []).filter((p) => Array.isArray(p.matrix) && p.matrix.length === 16)
+    planes: ((json as { planes?: WorkPlane[] }).planes ?? []).filter((p) => Array.isArray(p.matrix) && p.matrix.length === 16),
+    sketches: ((json as { sketches?: SketchData[] }).sketches ?? []).filter((k) => Array.isArray(k.plane) && k.plane.length === 16 && Array.isArray(k.points))
   }
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { SketchData } from '../sketch/model'
 import { Emitter } from './events'
 import { History } from './history'
 
@@ -43,6 +44,8 @@ type DocEvents = {
   dims: void
   /** Work planes were added, removed, moved or shown / hidden. */
   planes: void
+  /** Sketches were added, removed or edited. */
+  sketches: void
 }
 
 /** A user work plane (datum): its frame to world, column-major 4x4. */
@@ -598,6 +601,60 @@ export class CadDocument extends Emitter<DocEvents> {
     this.emit('planes', undefined)
   }
 
+  // ---- sketches -------------------------------------------------------------
+
+  sketches: SketchData[] = []
+
+  addSketch(sk: SketchData): void {
+    const add = (): void => {
+      this.sketches.push(sk)
+      this.emit('sketches', undefined)
+    }
+    const remove = (): void => {
+      this.sketches = this.sketches.filter((x) => x !== sk)
+      this.emit('sketches', undefined)
+    }
+    add()
+    this.history.record({ label: `Add ${sk.name}`, undo: remove, redo: add })
+  }
+
+  removeSketch(id: string): void {
+    const i = this.sketches.findIndex((x) => x.id === id)
+    if (i < 0) return
+    const sk = this.sketches[i]
+    const remove = (): void => {
+      this.sketches = this.sketches.filter((x) => x !== sk)
+      this.emit('sketches', undefined)
+    }
+    remove()
+    this.history.record({
+      label: `Delete ${sk.name}`,
+      undo: () => {
+        this.sketches.splice(Math.min(i, this.sketches.length), 0, sk)
+        this.emit('sketches', undefined)
+      },
+      redo: remove
+    })
+  }
+
+  /** Replace a sketch's contents with `after` as one undo step (`before` = its old contents). */
+  updateSketch(id: string, before: SketchData, after: SketchData, label: string): void {
+    const sk = this.sketches.find((x) => x.id === id)
+    if (!sk) return
+    const set = (v: SketchData): void => {
+      Object.assign(sk, structuredClone(v), { id })
+      this.emit('sketches', undefined)
+    }
+    set(after)
+    this.history.record({ label, undo: () => set(before), redo: () => set(after) })
+  }
+
+  /** Replace all sketches without history (opening a project). */
+  setSketches(list: SketchData[]): void {
+    this.sketches = list.map((s) => structuredClone(s))
+    this.emit('sketches', undefined)
+  }
+
   /** Replace all dimensions without history (opening a project). */
   setDims(dims: Dimension[]): void {
     this.dims = dims.map((d) => ({ ...d, id: newId() }))
@@ -612,6 +669,7 @@ export class CadDocument extends Emitter<DocEvents> {
       for (const n of [...this.roots]) this.removeNode(n)
       this.removeDims(this.dims.map((d) => d.id))
       for (const p of [...this.planes]) this.removePlane(p.id)
+      for (const k of [...this.sketches]) this.removeSketch(k.id)
       this.history.record({
         label: 'New',
         undo: () => {
@@ -641,6 +699,8 @@ export class CadDocument extends Emitter<DocEvents> {
     this.emit('dims', undefined)
     this.planes = []
     this.emit('planes', undefined)
+    this.sketches = []
+    this.emit('sketches', undefined)
     this.history.reset()
     this.name = 'Untitled'
     this.filePath = null
