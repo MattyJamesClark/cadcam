@@ -30,7 +30,7 @@ class EditFacesTool {
   private distance = 5
   private hl: Highlights
   private hover: Pick | null = null
-  private prompt = el('div', 'vp-prompt')
+  private prompt = el('div', 'vp-prompt above-strip')
   private strip = el('div', 'vp-strip editfaces-strip')
   private distBox = el('input')
   private preview: THREE.Mesh | null = null
