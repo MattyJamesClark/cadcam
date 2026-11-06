@@ -62,9 +62,19 @@ class TranslateTool {
     // Handle arrows along the active workplane's axes.
     this.controls.setSpace('local')
     this.pivot.quaternion.setFromRotationMatrix(new THREE.Matrix4().extractRotation(vp.workplane))
-    this.controls.size = 1.1
+    // Big enough to grab easily, and always drawn over the model (a part sunk
+    // into another must not hide its own handles).
+    this.controls.size = 1.8
     this.controls.attach(this.pivot)
     this.helper = this.controls.getHelper()
+    this.helper.traverse((o) => {
+      o.renderOrder = 30
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+      for (const x of m ? (Array.isArray(m) ? m : [m]) : []) {
+        x.depthTest = false
+        x.depthWrite = false
+      }
+    })
     vp.scene.add(this.helper)
     this.controls.addEventListener('change', () => vp.requestRender())
     // Dragging snaps to a round step that suits the zoom level (1, 2, 5, 10... mm).
