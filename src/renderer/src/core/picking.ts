@@ -216,7 +216,8 @@ export class Highlights {
   set(picks: { pick: Pick; color: number }[]): void {
     this.group.clear()
     for (const { pick, color } of picks) {
-      const key = `${pickKey(pick)}:${color}`
+      // Geometry id too: after an edit replaces a body's shape, the same face number is a new face.
+      const key = `${pickKey(pick)}:${(pick.object as THREE.Mesh).geometry?.uuid}:${color}`
       let o = this.cache.get(key)
       if (!o) {
         o = build(pick, color)

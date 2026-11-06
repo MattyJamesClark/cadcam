@@ -52,6 +52,12 @@ class Selection extends Emitter<{ changed: void; hover: { pick: Pick | null; x: 
     this.ctx = ctx
     const vp = ctx.viewport
     this.hl = new Highlights(vp)
+    // A document change (edit, undo...) can reshape what was hovered: drop the
+    // hover so no highlight of the old shape stays behind.
+    ctx.doc.history.on('changed', () => {
+      this.hover = null
+      this.draw()
+    })
     const canvas = vp.renderer.domElement
     let down: { x: number; y: number } | null = null
     canvas.addEventListener('pointerdown', (e) => {
