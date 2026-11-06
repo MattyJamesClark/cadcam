@@ -156,7 +156,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     const target = this.nav.pose.target
     this.headLight.position.copy(cam.position)
     this.headLight.target.position.copy(target)
-    this.grid.userData.update(cam, target.clone().applyMatrix4(this.workInv), this.nav.pose.dist)
+    this.grid.userData.update(cam, target.clone().applyMatrix4(this.gridInv ?? this.workInv), this.nav.pose.dist, this.gridStep)
     this.beforeRender.forEach((f) => f(cam))
     this.renderer.render(this.scene, cam)
     this.viewCube.render(cam)
@@ -308,11 +308,41 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.nav.goTo(this.nav.poseLookingFrom(dir, up.applyMatrix4(rot)), true)
   }
 
+  /** Fixed grid spacing in mm (null = automatic, follows the zoom). */
+  gridStep: number | null = null
+  private gridInv: THREE.Matrix4 | null = null
+  private gridFrame: THREE.Matrix4 | null = null
+
+  setGridStep(step: number | null): void {
+    this.gridStep = step && step > 0 ? step : null
+    this.emit('settings', undefined)
+    this.requestRender()
+  }
+
+  /** Spacing of the fine grid lines as drawn now (mm). */
+  get gridSpacing(): number {
+    return (this.grid.userData.minor as number | undefined) ?? 10
+  }
+
+  /** The step grid snapping uses: the fixed spacing, or the automatic one on screen. */
+  get gridSnapStep(): number {
+    return this.gridStep ?? this.gridSpacing
+  }
+
+  /** Draw the grid in another frame (e.g. a sketch's plane); null = the active workplane. */
+  setGridFrame(m: THREE.Matrix4 | null): void {
+    this.gridFrame = m ? m.clone() : null
+    this.gridInv = m ? m.clone().invert() : null
+    this.grid.matrix.copy(this.gridFrame ?? this.workplane)
+    this.requestRender()
+  }
+
   /** Make a frame the active workplane (identity = Absolute). */
   setWorkplane(m: THREE.Matrix4): void {
     this.workplane.copy(m)
     this.workInv.copy(m).invert()
-    for (const g of [this.grid, this.axes]) g.matrix.copy(m)
+    this.axes.matrix.copy(m)
+    this.grid.matrix.copy(this.gridFrame ?? m)
     this.triad.setFrame(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(m)))
     const n = new THREE.Vector3(0, 0, 1).transformDirection(m)
     this.groundPlane.setFromNormalAndCoplanarPoint(n, new THREE.Vector3().setFromMatrixPosition(m))
@@ -576,9 +606,13 @@ function makeGrid(): THREE.Group {
   plane.renderOrder = -1
   plane.raycast = () => {}
   g.add(plane)
-  g.userData.update = (cam: THREE.Camera, target: THREE.Vector3, dist: number): void => {
+  g.userData.update = (cam: THREE.Camera, target: THREE.Vector3, dist: number, fixed: number | null = null): void => {
     // 1, 10, 100 mm ... spacing chosen so cells stay a comfortable size on screen.
-    const minor = Math.pow(10, Math.max(-1, Math.floor(Math.log10(dist / 15))))
+    const auto = Math.pow(10, Math.max(-1, Math.floor(Math.log10(dist / 15))))
+    // A fixed spacing is drawn as set, coarsened by tens only when it would be too dense to see.
+    let minor = fixed ?? auto
+    while (fixed && minor < auto / 3) minor *= 10
+    g.userData.minor = minor
     const fade = Math.max(dist * 6, minor * 200)
     mat.uniforms.uMinor.value = minor
     mat.uniforms.uFade.value = fade

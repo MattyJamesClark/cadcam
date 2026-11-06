@@ -2,6 +2,7 @@ import { startContextMenu } from './contextmenu'
 import { selection } from './selection'
 import { startBottomBar } from './bottombar'
 import { startPlanes } from './planes'
+import { startGridControl } from './gridsnap'
 import { setTreeRefresher, treeSections } from './treeext'
 import * as THREE from 'three'
 import { CadDocument, type DocNode, type Measure } from './document'
@@ -167,6 +168,7 @@ export class Shell {
     selection.start(this.ctx)
     startBottomBar(this.ctx)
     startPlanes(this.ctx)
+    startGridControl(this.viewport)
     startContextMenu(this.ctx)
     for (const m of this.modules) m.init?.(this.ctx)
     let fitQueued = false

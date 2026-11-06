@@ -406,3 +406,10 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .sk-box { position: absolute; z-index: 5; border: 1px solid #4da3ff; background: rgba(77, 163, 255, .08); pointer-events: none; }
 .sk-box.crossing { border-style: dashed; border-color: #46a758; background: rgba(70, 167, 88, .08); }
 .sk-strip .vs-field input { width: 64px; }
+.sb-icon.sb-grid { width: auto; padding: 0 5px; gap: 3px; display: flex; align-items: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.grid-menu { position: fixed; z-index: 50; padding: 8px; width: 230px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.grid-row { display: flex; align-items: center; gap: 6px; }
+.grid-row input[type=text] { width: 80px; height: 22px; font-size: 12px; padding: 0 4px; }
+.grid-head { color: var(--muted); font-size: 11px; }
+.grid-presets { display: flex; flex-wrap: wrap; gap: 3px; }
+.grid-presets .btn.on { background: color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); }

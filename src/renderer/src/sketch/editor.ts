@@ -4,6 +4,7 @@ import { showCmdBar } from '@/core/cmdbar'
 import { el, fmt } from '@/core/toolpanel'
 import { pickAt } from '@/core/picking'
 import { Handles, worldPerPixel } from '@/core/handles'
+import { gridSnapOn } from '@/core/gridsnap'
 import {
   addConstraint,
   cloneSketch,
@@ -35,7 +36,7 @@ import { looseEnds } from './profiles'
  * selection. Draw / modify tools plug in through the Tool interface.
  */
 
-export type SnapKind = 'point' | 'mid' | 'centre' | 'quad' | 'cross' | 'curve' | 'model' | 'free'
+export type SnapKind = 'point' | 'mid' | 'centre' | 'quad' | 'cross' | 'curve' | 'model' | 'grid' | 'free'
 
 export interface Snap {
   p: P2
@@ -172,6 +173,9 @@ export class SketchEditor {
     vp.blockPick = () => true
     this.off.push(() => (vp.blockPick = prevBlock))
     this.lookAtPlane()
+    // The grid lies on the sketch plane while editing (grid snap uses it).
+    vp.setGridFrame(this.plane)
+    this.off.push(() => vp.setGridFrame(null))
 
     const bar = showCmdBar(vp.host, { ok: () => this.finish(), cancel: () => this.discard(), back: () => this.back() })
     this.off.push(() => bar.dispose())
@@ -680,14 +684,20 @@ export class SketchEditor {
       }
     }
     const s: Snap = best ?? { p: q, kind: 'free' }
-    if (s.kind === 'free' || s.kind === 'curve') this.infer(s, exclude, from, px)
+    if (s.kind === 'free' && gridSnapOn()) {
+      const g = this.ctx.viewport.gridSnapStep
+      const p: P2 = [Math.round(q[0] / g) * g, Math.round(q[1] / g) * g]
+      s.p = p
+      s.kind = 'grid'
+    }
+    if (s.kind === 'free' || s.kind === 'curve' || s.kind === 'grid') this.infer(s, exclude, from, px)
     return s
   }
 
   /** Line up with other points, and level / upright segments from `from`. */
   private infer(s: Snap, exclude: Set<string>, from: P2 | null, px: number): void {
     const tol = 7 * px
-    const free = s.kind === 'free'
+    const free = s.kind === 'free' || s.kind === 'grid'
     if (from && free) {
       if (Math.abs(s.p[1] - from[1]) < tol && Math.abs(s.p[0] - from[0]) > tol) {
         s.p = [s.p[0], from[1]]
@@ -725,7 +735,7 @@ export class SketchEditor {
     }
     if (!s) return void this.ctx.viewport.requestRender()
     const px = this.px
-    const col = s.kind === 'free' ? 0x9ca3af : 0xffd166
+    const col = s.kind === 'free' ? 0x9ca3af : s.kind === 'grid' ? 0x7dd3fc : 0xffd166
     const r = 5 * px
     const pts: THREE.Vector3[] = []
     const P = (x: number, y: number): THREE.Vector3 => new THREE.Vector3(x, y, 0)
@@ -735,6 +745,7 @@ export class SketchEditor {
     else if (s.kind === 'cross') pts.push(P(x - r, y - r), P(x + r, y + r), P(x - r, y + r), P(x + r, y - r))
     else if (s.kind === 'quad') pts.push(P(x, y - r), P(x + r, y), P(x + r, y), P(x, y + r), P(x, y + r), P(x - r, y), P(x - r, y), P(x, y - r))
     else if (s.kind === 'curve') pts.push(P(x - r, y), P(x + r, y), P(x, y - r), P(x, y + r))
+    else if (s.kind === 'grid') pts.push(P(x - r * 0.6, y), P(x + r * 0.6, y), P(x, y - r * 0.6), P(x, y + r * 0.6))
     const guides: THREE.Vector3[] = []
     const ix = this.ix()
     if (s.alignH && ix.pts.has(s.alignH)) guides.push(P(ix.p(s.alignH).x, ix.p(s.alignH).y), P(x, y))
