@@ -18,6 +18,7 @@ export class AxisTriad {
   private camera = new THREE.OrthographicCamera(-1.35, 1.35, 1.35, -1.35, 0.1, 10)
   private labels: THREE.Sprite[] = []
   private quat = new THREE.Quaternion()
+  private frame = new THREE.Group()
   private raycaster = new THREE.Raycaster()
   readonly el: HTMLCanvasElement
 
@@ -37,8 +38,9 @@ export class AxisTriad {
     this.camera.add(key)
     this.scene.add(this.camera)
 
+    this.scene.add(this.frame)
     // Origin ball.
-    this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 12), new THREE.MeshStandardMaterial({ color: 0xcfd6de })))
+    this.frame.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 12), new THREE.MeshStandardMaterial({ color: 0xcfd6de })))
 
     for (const a of AXES) {
       const mat = new THREE.MeshStandardMaterial({ color: a.color, roughness: 0.5 })
@@ -49,14 +51,14 @@ export class AxisTriad {
       const arm = new THREE.Group()
       arm.add(shaft, head)
       arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.dir)
-      this.scene.add(arm)
+      this.frame.add(arm)
 
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: letter(a.label, a.color), depthTest: false }))
       sprite.position.copy(a.dir).multiplyScalar(1.22)
       sprite.scale.setScalar(0.42)
       sprite.userData.dir = a.dir
       this.labels.push(sprite)
-      this.scene.add(sprite)
+      this.frame.add(sprite)
     }
 
     this.el.addEventListener('click', (e) => {
@@ -65,7 +67,7 @@ export class AxisTriad {
       this.raycaster.setFromCamera(ndc, this.camera)
       const hit = this.raycaster.intersectObjects(this.labels)[0]
       if (!hit) return
-      const dir = (hit.object.userData.dir as THREE.Vector3).clone()
+      const dir = (hit.object.userData.dir as THREE.Vector3).clone().applyQuaternion(this.frame.quaternion)
       this.onPick(e.shiftKey ? dir.negate() : dir)
     })
     this.el.addEventListener('pointermove', (e) => {
@@ -74,6 +76,13 @@ export class AxisTriad {
       this.raycaster.setFromCamera(ndc, this.camera)
       this.el.style.cursor = this.raycaster.intersectObjects(this.labels).length ? 'pointer' : 'default'
     })
+  }
+
+  /** Turn the triad to the active workplane's axes. */
+  setFrame(q: THREE.Quaternion): void {
+    this.frame.quaternion.copy(q)
+    this.frame.updateMatrixWorld(true)
+    this.drawnOnce = false
   }
 
   setVisible(v: boolean): void {

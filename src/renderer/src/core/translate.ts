@@ -59,7 +59,9 @@ class TranslateTool {
 
     this.controls = new TransformControls(vp.camera, vp.renderer.domElement)
     this.controls.setMode('translate')
-    this.controls.setSpace('world')
+    // Handle arrows along the active workplane's axes.
+    this.controls.setSpace('local')
+    this.pivot.quaternion.setFromRotationMatrix(new THREE.Matrix4().extractRotation(vp.workplane))
     this.controls.size = 1.1
     this.controls.attach(this.pivot)
     this.helper = this.controls.getHelper()

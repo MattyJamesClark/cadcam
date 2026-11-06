@@ -310,6 +310,7 @@ export class Viewport extends Emitter<ViewportEvents> {
     this.workplane.copy(m)
     this.workInv.copy(m).invert()
     for (const g of [this.grid, this.axes]) g.matrix.copy(m)
+    this.triad.setFrame(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(m)))
     const n = new THREE.Vector3(0, 0, 1).transformDirection(m)
     this.groundPlane.setFromNormalAndCoplanarPoint(n, new THREE.Vector3().setFromMatrixPosition(m))
     this.emit('settings', undefined)
