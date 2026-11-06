@@ -1339,8 +1339,9 @@ val editFaces(val it) {
       result = mo.Shape();
     }
     if (result.IsNull()) throw std::runtime_error("The edit gave an empty body");
+    // Text BREP, as readCad('brep') takes it.
     std::ostringstream os;
-    BinTools::Write(result, os);
+    BRepTools::Write(result, os);
     const std::string str = os.str();
     val res = val::object();
     res.set("brep", val(emscripten::typed_memory_view(str.size(), reinterpret_cast<const uint8_t*>(str.data()))).call<val>("slice"));

@@ -65,11 +65,13 @@ function open(ctx: ModuleContext, e: PointerEvent): void {
     })
     m.append(b)
   }
-  const sep = (): void => void m.append(Object.assign(document.createElement('div'), { className: 'menu-sep' }))
+  const sep = (): void => {
+    if (m.lastElementChild && !m.lastElementChild.classList.contains('menu-sep')) m.append(Object.assign(document.createElement('div'), { className: 'menu-sep' }))
+  }
   const cmd = (id: string): void => {
     const c = ctx.command(id)
     if (!c) return
-    item(c.icon, c.label, () => ctx.runCommand(id), c.isEnabled?.(ctx) ?? true, c.shortcut ?? '')
+    if (c.isEnabled?.(ctx) ?? true) item(c.icon, c.label, () => ctx.runCommand(id), true, c.shortcut ?? '')
   }
 
   if (faces.length) {
