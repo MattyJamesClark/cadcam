@@ -152,7 +152,9 @@ export class Shell {
         if (c && (c.isEnabled?.(this.ctx) ?? true)) void c.run(this.ctx)
         this.refreshRibbon()
       },
-      command: (id) => this.commands.get(id)
+      command: (id) => this.commands.get(id),
+      enterContext: (id) => this.enterContext(id),
+      leaveContext: (id) => this.leaveContext(id)
     }
 
     for (const m of this.modules)
@@ -182,7 +184,7 @@ export class Shell {
     }).observe(this.els.ribbon)
 
     const saved = safeGet(TAB_KEY)
-    this.activate(this.modules.find((m) => m.id === saved) ?? this.modules[0])
+    this.activate(this.modules.find((m) => m.id === saved && !m.contextual) ?? this.modules[0])
   }
 
   // ---- menu bar & quick toolbar -----------------------------------------
@@ -464,16 +466,40 @@ export class Shell {
       tab.setAttribute('role', 'tab')
       tab.dataset.id = m.id
       if (m.planned) tab.classList.add('planned')
+      if (m.contextual) {
+        tab.classList.add('contextual')
+        tab.hidden = true
+      }
       tab.addEventListener('click', () => this.activate(m))
       this.els.tabs.append(tab)
     }
+  }
+
+  /** Tab to go back to when a contextual tab closes. */
+  private contextReturn: CadModule | null = null
+
+  private enterContext(id: string): void {
+    const m = this.modules.find((x) => x.id === id && x.contextual)
+    if (!m) return
+    const tab = this.els.tabs.querySelector<HTMLElement>(`.tab[data-id="${id}"]`)
+    if (tab) tab.hidden = false
+    if (this.active && !this.active.contextual) this.contextReturn = this.active
+    this.activate(m)
+  }
+
+  private leaveContext(id: string): void {
+    const m = this.modules.find((x) => x.id === id && x.contextual)
+    if (!m) return
+    const tab = this.els.tabs.querySelector<HTMLElement>(`.tab[data-id="${id}"]`)
+    if (tab) tab.hidden = true
+    if (this.active === m) this.activate(this.contextReturn ?? this.modules.find((x) => !x.contextual) ?? this.modules[0])
   }
 
   activate(m: CadModule): void {
     if (this.active === m) return
     this.active?.deactivate?.(this.ctx)
     this.active = m
-    safeSet(TAB_KEY, m.id)
+    if (!m.contextual) safeSet(TAB_KEY, m.id)
     for (const t of this.els.tabs.querySelectorAll<HTMLElement>('.tab')) {
       const on = t.dataset.id === m.id
       t.classList.toggle('active', on)

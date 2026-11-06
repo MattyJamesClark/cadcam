@@ -65,7 +65,7 @@ export function openFeature(ctx: ModuleContext, kind: FeatureKind, mode?: Mode):
   let withRegions = shown.filter((s) => findRegions(s).length)
   if (!withRegions.length) withRegions = ctx.doc.sketches.filter((s) => findRegions(s).length)
   if (!withRegions.length) {
-    ctx.status('Draw a closed profile in a sketch first (Sketch tab).', 'warn')
+    ctx.status('Draw a closed profile in a sketch first (Sketch, on the left of this tab).', 'warn')
     return
   }
   const start = withRegions.find((s) => s.id === editing) ?? withRegions[withRegions.length - 1]

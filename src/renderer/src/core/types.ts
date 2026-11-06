@@ -15,6 +15,10 @@ export interface ModuleContext {
   runCommand(id: string): void
   /** Look up a command by id. */
   command(id: string): Command | undefined
+  /** Show a contextual module's tab and switch to it (e.g. Sketch while a sketch is open). */
+  enterContext(id: string): void
+  /** Hide a contextual module's tab again and go back to the tab the user was on. */
+  leaveContext(id: string): void
 }
 
 export interface Command {
@@ -54,6 +58,12 @@ export interface CadModule {
   /** Tabs are sorted by this, low to high. */
   order: number
   groups: CommandGroup[]
+  /**
+   * No tab of its own: its tab only appears, highlighted, while it is entered
+   * with ctx.enterContext (like SolidWorks' Sketch tools, which come up once
+   * a sketch is open). Its commands are registered all the time.
+   */
+  contextual?: boolean
   /** If set, the tab shows this note instead of commands (module not built yet). */
   planned?: string
   /** Called once at startup, for always-on behaviour (e.g. hover info). */

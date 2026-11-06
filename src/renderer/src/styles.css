@@ -69,6 +69,10 @@ button { font: inherit; color: inherit; }
 .tab:hover { color: var(--text); background: var(--panel); }
 .tab.active { color: var(--text); background: var(--panel); border-color: var(--line); position: relative; top: 1px; box-shadow: inset 0 2px 0 var(--accent); }
 .tab.planned { font-style: italic; }
+.tab.contextual { color: var(--accent); display: flex; align-items: center; gap: 6px; }
+.tab.contextual::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tab.contextual[hidden] { display: none; }
+.tab.contextual.active { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
 
 /* ribbon */
 .ribbon {
@@ -457,3 +461,6 @@ input[type='color'] { width: 34px; height: 26px; padding: 0 2px; border: 1px sol
 .sk-place-label { position: absolute; z-index: 4; transform: translate(4px, -100%); margin-top: -2px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: var(--text); font-size: 11px; white-space: nowrap; pointer-events: none; }
 .sk-place-label.on { border-color: #ffb020; color: #ffb020; }
 .sk-place-bad { color: #ff8a8a; }
+.menu-item.danger { color: #ff8080; }
+.menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, #ff5050 16%, transparent); }
+.sk-row-menu { min-width: 210px; }

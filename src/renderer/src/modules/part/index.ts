@@ -4,7 +4,7 @@ import { openBoolean, type BoolOp } from '@/part/boolean'
 import type { Mode } from '@/part/common'
 
 /**
- * Part Design: solids from sketches (extrude, revolve, sweep) and booleans
+ * Part Design: sketches (the Sketch button) and solids from them (extrude, revolve, sweep) and booleans
  * (add, cut, intersect). Direct modelling: each command makes or changes a
  * plain body in one undo step; there is no feature history. Values are typed
  * in the strip or dragged on screen, with a live preview.
@@ -14,6 +14,7 @@ const svg = (body: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 
 const ico = {
+  sketch: svg('<path d="M4 20h16"/><path d="M5 16 15 6l3 3L8 19H5z"/><path d="m13 8 3 3"/>'),
   extrude: svg('<path d="M4 17l5 3 11-5-5-3z"/><path d="M4 17V9l11-5v8"/><path d="M9 20v-8L4 9"/><path d="M9 12l11-5v8" opacity=".55"/><path d="M15 4l5 3"/>'),
   extrudeCut: svg('<path d="M3 15l7 4 11-5-7-4z"/><path d="M8 13.5l4 2.2 4.5-2-4-2.2z" fill="currentColor" opacity=".35"/><path d="M12 15.7V9M16.5 13.7V7.5M8 13.5V7" stroke-dasharray="2 1.6"/>'),
   revolve: svg('<path d="M12 3v18" stroke-dasharray="3 2"/><ellipse cx="12" cy="7" rx="6" ry="2"/><path d="M6 7v10M18 7v10"/><path d="M6 17a6 2 0 0 0 12 0"/><path d="M15 3.5l2 1.2-1.6 1.4" opacity=".7"/>'),
@@ -47,6 +48,21 @@ export const partModule: CadModule = {
   title: 'Part Design',
   order: 20,
   groups: [
+    {
+      label: 'Sketch',
+      commands: [
+        // The sketch module's own command (it has no tab): pick a plane, face or sketch, then the Sketch tools come up.
+        {
+          id: 'part.sketch',
+          label: 'Sketch',
+          icon: ico.sketch,
+          tooltip: 'New sketch: click a plane (Top, Front, Right or a work plane), a flat face or an existing sketch, then the Sketch tools come up',
+          isEnabled: (ctx) => ctx.command('sketch.new')?.isEnabled?.(ctx) ?? true,
+          isActive: (ctx) => ctx.command('sketch.new')?.isActive?.(ctx) ?? false,
+          run: (ctx) => ctx.runCommand('sketch.new')
+        }
+      ]
+    },
     {
       label: 'Make solid',
       commands: [
