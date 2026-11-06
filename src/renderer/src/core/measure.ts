@@ -294,6 +294,40 @@ class MeasureTool {
     const label = el('div', 'dim-label', fmt(a.distanceTo(b)))
     this.ctx.viewport.host.appendChild(label)
     this.labels.push({ el: label, at: a.clone().add(b).multiplyScalar(0.5) })
+    this.addTriangle(a, b, color)
+  }
+
+  /**
+   * Right-angled triangle under the distance: a leg along the active plane's
+   * Z (the height difference) and a leg in the plane, each with its length.
+   */
+  private addTriangle(a: THREE.Vector3, b: THREE.Vector3, color: number): void {
+    const work = this.ctx.viewport.workplane
+    const inv = work.clone().invert()
+    const la = a.clone().applyMatrix4(inv)
+    const lb = b.clone().applyMatrix4(inv)
+    const dz = Math.abs(la.z - lb.z)
+    const flat = Math.hypot(la.x - lb.x, la.y - lb.y)
+    const tol = 1e-6 * Math.max(1, a.distanceTo(b))
+    if (dz < tol || flat < tol) return
+    // Corner straight below (or above) the higher point, level with the lower one.
+    const [hi, lo] = la.z > lb.z ? [la, lb] : [lb, la]
+    const corner = new THREE.Vector3(hi.x, hi.y, lo.z).applyMatrix4(work)
+    const H = hi.clone().applyMatrix4(work)
+    const Lo = lo.clone().applyMatrix4(work)
+    const g = new THREE.BufferGeometry().setFromPoints([H, corner, corner, Lo])
+    const legs = new THREE.LineSegments(g, new THREE.LineDashedMaterial({ color, depthTest: false, dashSize: 2, gapSize: 1.5, transparent: true, opacity: 0.85 }))
+    legs.computeLineDistances()
+    legs.renderOrder = 13
+    this.dims.add(legs)
+    const leg = (text: string, at: THREE.Vector3, title: string): void => {
+      const l = el('div', 'dim-label dim-leg', text)
+      l.title = title
+      this.ctx.viewport.host.appendChild(l)
+      this.labels.push({ el: l, at })
+    }
+    leg(`Z ${fmt(dz)}`, H.clone().add(corner).multiplyScalar(0.5), 'Height difference along the active plane Z')
+    leg(`XY ${fmt(flat)}`, corner.clone().add(Lo).multiplyScalar(0.5), 'Distance in the active plane (X / Y only)')
   }
 
   private placeLabels(): void {
