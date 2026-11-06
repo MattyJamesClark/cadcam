@@ -41,6 +41,7 @@
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <ChFi3d.hxx>
 #include <BRepGProp.hxx>
 #include <BRepGProp_Face.hxx>
 #include <BRepLProp_SLProps.hxx>
@@ -1071,6 +1072,10 @@ inline Result blend(Blend kind, const TopoDS_Shape& input, const std::vector<Edg
     for (auto& es : list) {
       const TopoDS_Edge e = TopoDS::Edge(ix.edges.FindKey(es.edge + 1));
       const auto side = ix.facesOf(e);
+      // Only a convex blend eats into the end face. A concave one (an inside
+      // corner, e.g. a pocket corner meeting the rim) adds material and runs
+      // out into the air past the end, so the end face's width doesn't matter.
+      if (side.size() == 2 && ChFi3d::DefineConnectType(e, side[0], side[1], 1e-6, false) == ChFiDS_Concave) continue;
       TopoDS_Vertex v0, v1;
       TopExp::Vertices(e, v0, v1);
       const double want = std::max(es.r1, es.r2);

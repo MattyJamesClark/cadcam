@@ -546,6 +546,25 @@ inline std::vector<Spec> cases() {
       const double ch = 0.5 * 4 * 40;
       L.push_back({"C6", "Chamfer", "Shelled box (3 mm walls): 2 mm chamfer on an outside corner", true, rawChamfer(cupf, corner, 2),
                    [=] { return blend(Blend::Chamfer, cupf, sized(corner, 2)); }, solidCheck(1, vc - ch - 20, vc - ch + 20)});
+      // Found in the app: rounding the inside (pocket) corners of a shelled box.
+      TopoDS_Shape cup = shell(bb, facesFacing(bb, gp::DZ()), 3).shape;
+      const double vp = volume(cup), k = 1 - kPi / 4;
+      auto inVert = [](const TopoDS_Shape& s) {
+        return edgesWhere(s, [](const gp_Pnt& p, const BRepAdaptor_Curve& c) {
+          return c.GetType() == GeomAbs_Line && c.Line().Direction().IsParallel(gp::DZ(), 1e-6) && (std::fabs(p.X() - 3) < 1e-6 || std::fabs(p.X() - 97) < 1e-6) &&
+                 (std::fabs(p.Y() - 3) < 1e-6 || std::fabs(p.Y() - 57) < 1e-6);
+        });
+      };
+      auto inBottom = edgesWhere(cup, [](const gp_Pnt& p, const BRepAdaptor_Curve&) { return std::fabs(p.Z() - 3) < 1e-6; });
+      auto iv = inVert(cup);
+      filletCase("F21", "Shelled box (3 mm walls): r5 in the 4 inside corners of the pocket", cup, iv, 5, vp + 4 * k * 25 * 37 - 20, vp + 4 * k * 25 * 37 + 20);
+      filletCase("F22", "Shelled box: r3 round the pocket floor", cup, inBottom, 3, vp + k * 9 * 296 - 60, vp + k * 9 * 296 + 20);
+      std::vector<int> both = iv;
+      both.insert(both.end(), inBottom.begin(), inBottom.end());
+      filletCase("F23", "Shelled box: r5 on all 8 inside edges (corners where 3 rounds meet)", cup, both, 5, vp + 4 * k * 25 * 32, vp + 4 * k * 25 * 37 + k * 25 * 296 + 20);
+      filletCase("F24", "Shelled box: r10 inside corner, over three times the wall", cup, {iv[0]}, 10, vp + k * 100 * 37 - 20, vp + k * 100 * 37 + 20);
+      auto ivf = inVert(cupf);
+      filletCase("F25", "Shelled box with filleted rims: r5 in the 4 inside corners", cupf, ivf, 5, vc + 4 * k * 25 * 25, vc + 4 * k * 25 * 37 + 20);
     }
     L.push_back({"C4", "Chamfer", "Chamfer deeper than the plate (6 mm on a 4 mm plate)", false, rawChamfer(p, top, 6), [=] { return blend(Blend::Chamfer, p, sized(top, 6)); }, solidCheck(1, 0, 1600)});
   }
