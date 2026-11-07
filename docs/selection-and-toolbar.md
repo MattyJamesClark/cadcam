@@ -7,7 +7,7 @@ MATHEW's spec (2026-11-06): selection is the core of the software, so it comes f
 - Hold the left button and drag. **Left to right** (solid box) takes only items wholly inside. **Right to left** (dashed box) takes anything it touches. The sketcher already used this convention.
 - **Shift** (or Multi-select) adds to the selection, **Ctrl** takes items out, and a plain box replaces the selection.
 - The box follows the selection filter. With bodies or surfaces on, it takes whole bodies. Otherwise it takes the points, edges or faces inside it. Faces turned away from the view are skipped.
-- Hidden items are skipped. Items behind other items are still taken, as in VISI.
+- Hidden items are skipped. Items behind other items are still taken.
 - `boxSelect()` and `BoxRubber` are shared, so any command that needs a set uses the same code. Translate already does.
 
 Point snapping (`pickAt`) also looks at corners of bodies next to the one under the pointer, and just off the model. A corner on a body's outline can now be picked even when the pointer is a pixel outside it.

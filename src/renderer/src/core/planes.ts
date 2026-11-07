@@ -12,7 +12,7 @@ import { showCmdBar } from './cmdbar'
 import { el, fmt, toolPanel } from './toolpanel'
 
 /**
- * Work planes, the VISI way: one plane is active at a time (Absolute by
+ * Work planes: one plane is active at a time (Absolute by
  * default) and the grid, axes, X/Y/Z readout and standard views follow it.
  * Planes are made from 3 points, a flat face (origin at its bottom-left
  * corner) or an origin point, and moved / rotated from a strip at the bottom
@@ -266,9 +266,9 @@ const nextName = (ctx: ModuleContext): string => {
   return `Plane ${i}`
 }
 
-/** Add a plane and make it the active one (as VISI does). */
+/** Add a plane and make it the active one. */
 function newPlane(ctx: ModuleContext, m: THREE.Matrix4): void {
-  // New planes start temporary (VISI): pin one to save it with the project.
+  // New planes start temporary: pin one to save it with the project.
   const p = ctx.doc.addPlane({ name: nextName(ctx), matrix: m.toArray(), visible: true, temp: true })
   mgr?.setActive(p.id)
 }

@@ -750,13 +750,13 @@ export class Shell {
     this.renderProps()
   }
 
-  /** The model grouped by layer, like the Layers tree in VISI / layer managers in other CAD. */
+  /** The model grouped by layer, like the layer managers in other CAD. */
   private renderLayers(sel: Set<string>): void {
     const tree = this.els.tree
     const map = this.doc.layerMap()
     const names = [...map.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { numeric: true })))
     if (names.length === 1 && names[0] === '') {
-      tree.append(h('li', 'tree-empty', 'No layers in this model. Files from VISI, Cimatron, NX, IGES and many STEP exporters keep their layers; they appear here.'))
+      tree.append(h('li', 'tree-empty', 'No layers in this model. Files from many CAD systems (IGES and many STEP exporters) keep their layers; they appear here.'))
     }
     for (const name of names) {
       const bodies = map.get(name)!

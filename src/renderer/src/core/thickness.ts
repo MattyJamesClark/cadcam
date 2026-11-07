@@ -5,7 +5,7 @@ import { showCmdBar } from './cmdbar'
 import { el, fmt } from './toolpanel'
 
 /**
- * Query thickness (VISI ? menu): click a point on a face and get the wall
+ * Query thickness: click a point on a face and get the wall
  * thickness there, measured straight through the body along the face normal
  * to the far wall. Keeps going (one result per click) until Esc / tick.
  */

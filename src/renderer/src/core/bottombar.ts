@@ -7,8 +7,8 @@ import { commandRunning, onCommandChange } from './cmdbar'
 
 /**
  * Small icon-only toolbar along the bottom of the viewport (Multi-select,
- * Previous selection, Clear selection and what is selected), plus the VISI-
- * style selection-filter palette down the left of the view.
+ * Previous selection, Clear selection and what is selected), plus the
+ * selection-filter palette down the left of the view.
  * Modules can add their own buttons later with addBottomButton().
  */
 
@@ -38,7 +38,7 @@ export function startBottomBar(ctx: ModuleContext): void {
   bar = el('div', 'vp-bar')
   bar.addEventListener('pointerdown', (e) => e.stopPropagation())
 
-  // Selection filter (VISI style): a palette of big icons down the left of
+  // Selection filter: a palette of big icons down the left of
   // the view. A click picks just that type; Ctrl+click adds / removes one.
   const palette = el('div', 'vp-filterbar')
   palette.addEventListener('pointerdown', (e) => e.stopPropagation())
@@ -141,7 +141,7 @@ export function startBottomBar(ctx: ModuleContext): void {
     const k = FILTER_KEYS.find((x) => TYPES[x].key === e.key)
     if (k) selectFilter.set(only(k))
   })
-  // During a command (VISI-style): C combined / everything, E elements (bodies),
+  // During a command: C combined / everything, E elements (bodies),
   // P points, F faces, D edges, S surfaces. Caught first so they don't run
   // the ribbon shortcuts that share those letters.
   const LETTERS: Record<string, keyof SelectFilter | 'all'> = { c: 'all', e: 'body', p: 'vertex', f: 'face', d: 'edge', s: 'surface' }

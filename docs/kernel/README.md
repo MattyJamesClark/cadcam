@@ -3,7 +3,7 @@
 The CAD kernel is OpenCascade 7.9 compiled to WebAssembly (`kernel/cadkernel.cpp`). OpenCascade is
 capable but brittle: a fillet meeting a corner badly, a boolean on faces that touch, or a shell
 over a tight round either fails with no reason, or worse, hands back a broken or half-empty solid.
-VISI runs on Parasolid, so that is the bar. Our answer is a layer of our own between the app and
+Commercial kernels such as Parasolid set the bar. Our answer is a layer of our own between the app and
 OpenCascade, `kernel/robust.hxx`, that every modelling operation goes through:
 
 1. **Pre-checks** catch the impossible cases before any work, in plain English, naming the edge or

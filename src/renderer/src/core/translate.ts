@@ -267,7 +267,7 @@ class TranslateTool {
     return box
   }
 
-  /** Active workplane rotation: typed X / Y / Z are along its axes (VISI). */
+  /** Active workplane rotation: typed X / Y / Z are along its axes. */
   private axes(): { rot: THREE.Matrix4; inv: THREE.Matrix4 } {
     const rot = new THREE.Matrix4().extractRotation(this.ctx.viewport.workplane)
     return { rot, inv: rot.clone().transpose() }

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Viewport } from './viewport'
 
 /**
- * On-screen drag handles (VISI style) that any command can use to set its
+ * On-screen drag handles that any command can use to set its
  * values by dragging in the view, kept in step with the typed boxes:
  *
  *  - arrow: a distance along a direction (Edit faces, extrude, offset...)

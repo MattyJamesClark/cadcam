@@ -5,10 +5,10 @@ import { isSheet, type Pick, type SelectFilter } from './picking'
 import { el } from './toolpanel'
 
 /**
- * Box selection (VISI / AutoCAD style), shared by plain selection and by every
+ * Box selection, shared by plain selection and by every
  * command that asks for a set of items. Drag left to right: only items wholly
  * inside the box. Drag right to left (dashed box): anything the box touches.
- * Hidden items are skipped; items behind others are still taken, like VISI.
+ * Hidden items are skipped; items behind others are still taken.
  */
 
 export interface ScreenRect {

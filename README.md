@@ -50,7 +50,7 @@ STEP/IGES imports keep the structure of the source file: assemblies, parts, mult
 names, colours (per part, body and face) and layers. Wireframe curves come in as their own items.
 
 * **Tree / Layers** (top of the side panel): switch between the assembly tree and the bodies
-  grouped by layer, like the Layers tree in VISI. The eye on a layer hides or shows all of it.
+  grouped by layer. The eye on a layer hides or shows all of it.
 * **Properties** (bottom of the side panel): for the selection, the name, type, layer, colour,
   STEP product data (part number, nomenclature, description, revision, source), the file header
   (author, originating system, STEP schema), and size, surface area, volume and triangle count.

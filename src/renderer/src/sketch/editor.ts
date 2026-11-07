@@ -1086,7 +1086,7 @@ export class SketchEditor {
     const x0 = Math.min(b.x, e.clientX) - r.left
     const y0 = Math.min(b.y, e.clientY) - r.top
     Object.assign(b.el.style, { left: `${x0}px`, top: `${y0}px`, width: `${Math.abs(e.clientX - b.x)}px`, height: `${Math.abs(e.clientY - b.y)}px` })
-    // Left to right: whole items inside. Right to left: anything it touches (like VISI / AutoCAD).
+    // Left to right: whole items inside. Right to left: anything it touches (common CAD convention).
     b.el.classList.toggle('crossing', e.clientX < b.x)
   }
 
@@ -1146,7 +1146,7 @@ export class SketchEditor {
 
   private rightDown: { x: number; y: number } | null = null
   private onRightUp(e: PointerEvent): void {
-    // Right click (no drag): end the line chain / tool step, like VISI.
+    // Right click (no drag): end the line chain / tool step.
     const d = this.rightDown
     this.rightDown = null
     if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || !this.tool) return

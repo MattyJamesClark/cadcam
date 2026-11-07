@@ -1,7 +1,7 @@
 import { el } from './toolpanel'
 
 /**
- * VISI-style command bar: a small floating strip at the top centre of the
+ * Command bar: a small floating strip at the top centre of the
  * view while a command runs, with OK (green tick), Cancel (red cross) and
  * Back / Next arrows. Each command passes the actions it supports; the rest
  * are shown greyed out. Only one bar shows at a time (the newest wins).

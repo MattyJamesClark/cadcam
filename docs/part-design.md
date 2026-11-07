@@ -1,6 +1,6 @@
 # Part Design
 
-The Part Design tab makes and combines solids. It works the VISI way: direct modelling, one undo
+The Part Design tab makes and combines solids. It uses direct modelling: one undo
 step per command, no feature tree. Sketches keep their constraints and dimensions, so a profile
 can be changed and used again.
 
